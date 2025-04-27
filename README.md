@@ -1,4 +1,4 @@
-# Server Log Collector (`collect5.py`)
+# Server Log Collector (`collect.py`)
 
 This Python script collects server information, IML logs, and AHS files from servers using the Redfish API. It processes multiple servers concurrently, saves data to JSON and AHS files, and logs errors for debugging. The script is designed for system administrators managing server infrastructure.
 
@@ -25,7 +25,7 @@ pip install redfish
 
 ### Input File
 - **File**: `servers.csv`
-- **Location**: Same directory as `collect5.py`
+- **Location**: Same directory as `collect.py`
 - **Format**: CSV file with UTF-8 encoding and the following columns:
   - `ip`: IP address of the server (e.g., `192.168.1.100`)
   - `username`: Redfish API username
@@ -57,7 +57,7 @@ pip install redfish
      ```
 
 3. **Prepare the Script**:
-   - Save `collect5.py` to a working directory (e.g., `/path/to/script/`).
+   - Save `collect.py` to a working directory (e.g., `/path/to/script/`).
    - Place `servers.csv` in the same directory.
 
 4. **Verify Permissions**:
@@ -85,7 +85,7 @@ pip install redfish
      ```
    - Execute the script:
      ```bash
-     python collect5.py
+     python collect.py
      ```
 
 3. **Configure Concurrent Processing**:
@@ -136,7 +136,7 @@ pip install redfish
 
 ### Common Issues
 1. **"No such file or directory: servers.csv"**:
-   - Ensure `servers.csv` is in the same directory as `collect5.py`.
+   - Ensure `servers.csv` is in the same directory as `collect.py`.
    - Verify the file name is exactly `servers.csv` (case-sensitive on Linux).
 
 2. **"UnicodeDecodeError" in CSV Reading**:
@@ -158,7 +158,7 @@ pip install redfish
    - **Solutions**:
      - Run the script with elevated permissions:
        ```bash
-       sudo python collect5.py
+       sudo python collect.py
        ```
      - Change directory permissions:
        ```bash
@@ -220,7 +220,7 @@ pip install redfish
    ```
 2. Run the script:
    ```bash
-   python collect5.py
+   python collect.py
    ```
 3. Enter `5` when prompted for concurrent processes.
 4. Check `server_logs` for output:
