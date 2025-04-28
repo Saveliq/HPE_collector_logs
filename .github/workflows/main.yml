@@ -3,7 +3,7 @@ name: Build and Release Win app
 on:
   push:
     branches:
-      - master
+      - main
 
 permissions:
   contents: write
