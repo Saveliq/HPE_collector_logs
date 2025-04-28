@@ -3,7 +3,7 @@ name: Build and Release Win app
 on:
   push:
     branches:
-      - master  # Только на пуш в master
+      - main  # Только на пуш в main
 
 jobs:
   pyinstaller-build:
