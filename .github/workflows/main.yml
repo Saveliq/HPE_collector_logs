@@ -5,6 +5,9 @@ on:
     branches:
       - main  # Только на пуш в main
 
+permissions:
+  contents: write
+
 jobs:
   pyinstaller-build:
     runs-on: windows-latest
