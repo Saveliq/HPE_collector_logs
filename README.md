@@ -2,7 +2,7 @@
 
 This Python script collects server information, IML logs, and AHS files from servers using the Redfish API. It processes multiple servers concurrently, saves data to JSON and AHS files, and logs errors for debugging. The script is designed for system administrators managing server infrastructure.
 
-## Prerequisites
+## Prerequisites 
 
 Before running the script, ensure the following requirements are met:
 
