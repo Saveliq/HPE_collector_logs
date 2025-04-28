@@ -44,16 +44,20 @@ pip install redfish
 ## Installation
 
 1. **Install Python**:
-   - Download and install Python 3.6+ from [python.org](https://www.python.org/downloads/).
+   - Download and install Python 3.13.2 from [python.org](https://www.python.org/downloads/).
    - Verify installation:
      ```bash
      python --version
      ```
-
+2. **Create VENV and Activate**:
+    ```bash
+     py -m venv venv
+     .\venv\Scripts\activate
+     ```
 2. **Install Dependencies**:
-   - Install the `redfish` package:
+   - Install the packages:
      ```bash
-     pip install redfish
+     pip install -r .\requirements
      ```
 
 3. **Prepare the Script**:
@@ -86,6 +90,7 @@ pip install redfish
    - Execute the script:
      ```bash
      python collect.py
+     pyinstaller.exe -Fc -n HPE_collector_logs.exe collect.py
      ```
 
 3. **Configure Concurrent Processing**:
