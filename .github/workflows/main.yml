@@ -2,8 +2,8 @@ name: Build and Release Win app
 
 on:
   push:
-    tags:
-      - 'v*'   # Только при пуше тега типа v1.0.0
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -25,9 +25,25 @@ jobs:
           upload_exe_with_name: HPE_collector_logs
           options: '--onefile, --name "HPE_collector_logs.exe", --windowed,'
 
-      - name: Create GitHub Release
+      - name: Configure git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create and push tag
+        id: tagging
+        run: |
+          $env:TAG ="v${{ github.run_number }}"
+          echo "TAG=$TAG" >> $GITHUB_ENV
+          git tag $TAG
+          git push origin $TAG
+
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.TAG }}
+          name: Release ${{ env.TAG }}
+          generate_release_notes: true
           files: dist/HPE_collector_logs.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
