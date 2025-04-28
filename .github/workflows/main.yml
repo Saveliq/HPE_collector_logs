@@ -10,6 +10,7 @@ jobs:
         uses: sayyid5416/pyinstaller@v1
         with:
           python_ver: '3.13.2'
-          requirements: requirements
+          spec: 'collect.py'
+          requirements: 'requirements'
           upload_exe_with_name: HPE_collector_logs
           options: '--onefile, --name "HPE_collector_logs.exe", --windowed,'
