@@ -23,7 +23,7 @@ jobs:
           spec: 'collect.py'
           requirements: 'requirements'
           upload_exe_with_name: HPE_collector_logs
-          options: '--onefile, --name "HPE_collector_logs.exe", --windowed,'
+          options: '--onefile, --name "HPE_collector_logs.exe", --console,'
 
       - name: Configure git
         run: |
