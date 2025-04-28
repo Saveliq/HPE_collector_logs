@@ -91,6 +91,7 @@ pip install redfish
      ```bash
      python collect.py
      pyinstaller.exe -Fc -n HPE_collector_logs.exe collect.py
+     certutil -hashfile ".\dist\HPE_collector_logs.exe" MD5
      ```
 
 3. **Configure Concurrent Processing**:
