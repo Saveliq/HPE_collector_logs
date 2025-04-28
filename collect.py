@@ -159,7 +159,11 @@ class ServerInfoCollector:
             r"/redfish/v1/Managers/.*Service.*",
             r"/redfish/v1/Managers/.*VirtualMedia.*",
             r"/redfish/v1/Chassis/.*PowerMeter.*",
+            r"/redfish/v1/Chassis/.*FederatedGroup.*",
+            r"/redfish/v1/Chassis/.*Temperatures.*",
             r".*IEL.*",
+            r".*SL/Entries.*",
+            r".*Event/Entries.*",
         ]
         # URL для коллекции IML-логов
         self.IML_ENTRIES_URL = self.normalize_url("/redfish/v1/Systems/1/LogServices/IML/Entries/")
@@ -322,13 +326,17 @@ def process_server(server, output_dir):
             json.dump(iml_logs, f, indent=2, ensure_ascii=False)
 
         # Запрашиваем и сохраняем AHS-файл
+        ahs_links_args = ["minimalDL=1&&days=1", "days=1", "days=7", "downloadAll=1"]
         ahs_filename = f"{folder_name}.ahs"
         ahs_file = os.path.join(temp_dir, ahs_filename)
-        ahs_response = client.get(f"/ahsdata/{folder_name}.ahs?minimalDL=1&&days=1")
-        if ahs_response:
-            with open(ahs_file, "wb") as f:
-                f.write(ahs_response.read)
-            client._log_info(f"AHS-файл сохранен: {ahs_filename}")
+        ahs_response = None
+        for ahs_link in ahs_links_args:
+            ahs_response = client.get(f"/ahsdata/{folder_name}.ahs?{ahs_link}")
+            if ahs_response:
+                with open(ahs_file, "wb") as f:
+                    f.write(ahs_response.read)
+                client._log_info(f"AHS-файл сохранен: {ahs_filename}")
+                break
 
         # Переименовываем временную папку в окончательную
         os.rename(temp_dir, final_dir)
