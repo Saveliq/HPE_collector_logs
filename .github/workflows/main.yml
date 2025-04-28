@@ -1,11 +1,18 @@
-name: Win app
+name: Build and Release Win app
 
-on: [push]
+on:
+  push:
+    branches:
+      - master  # Только на пуш в master
 
 jobs:
   pyinstaller-build:
     runs-on: windows-latest
+
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Create Executable
         uses: sayyid5416/pyinstaller@v1
         with:
@@ -14,3 +21,20 @@ jobs:
           requirements: 'requirements'
           upload_exe_with_name: HPE_collector_logs
           options: '--onefile, --name "HPE_collector_logs.exe", --windowed,'
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          release_name: Release v${{ github.run_number }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Executable to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/HPE_collector_logs.exe  # Путь к собранному .exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
