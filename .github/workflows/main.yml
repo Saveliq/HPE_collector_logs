@@ -2,8 +2,8 @@ name: Build and Release Win app
 
 on:
   push:
-    branches:
-      - main  # Только на пуш в main
+    tags:
+      - 'v*'    # реагировать только на пуш тегов типа v1.0.0
 
 permissions:
   contents: write
@@ -25,19 +25,9 @@ jobs:
           upload_exe_with_name: HPE_collector_logs
           options: '--onefile, --name "HPE_collector_logs.exe", --windowed,'
 
-      - name: Create Release
-        id: create_release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.run_number }}
-          release_name: Release v${{ github.run_number }}
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Executable to Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/HPE_collector_logs.exe  # Путь к собранному .exe
+          files: dist/HPE_collector_logs.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
