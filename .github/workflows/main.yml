@@ -16,24 +16,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Create Executable
+      - name: Create Executable for Modern Systems
         uses: sayyid5416/pyinstaller@v1
         with:
           python_ver: '3.13.2'
           spec: 'collect.py'
-          requirements: 'requirements'
-          upload_exe_with_name: HPE_collector_logs
-          options: '--onefile, --name "HPE_collector_logs.exe", --console,'
+          requirements: 'requirements.txt'
+          options: '--onefile, --name "HPE_collector_logs.exe", --console'
 
-
-      - name: Create Executable 2
+      - name: Create Executable for Windows 7
         uses: sayyid5416/pyinstaller@v1
         with:
           python_ver: '3.8'
           spec: 'collect.py'
           requirements: 'requirements_win7.txt'
-          upload_exe_with_name: HPE_collector_logs
-          options: '--onefile, --name "HPE_collector_logs_win7.exe", --console,'
+          options: '--onefile, --name "HPE_collector_logs_win7.exe", --console'
 
       - name: Configure git
         run: |
@@ -43,7 +40,7 @@ jobs:
       - name: Create and push tag
         id: tagging
         run: |
-          $env:TAG ="v${{ github.run_number }}"
+          $env:TAG = "v${{ github.run_number }}"
           echo "TAG=$TAG" >> $GITHUB_ENV
           git tag $TAG
           git push origin $TAG
@@ -51,9 +48,11 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ env.TAG }}
           name: Release ${{ env.TAG }}
           generate_release_notes: true
-          files: dist/HPE_collector_logs.exe
+          files: |
+            dist/HPE_collector_logs.exe
+            dist/HPE_collector_logs_win7.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
