@@ -26,7 +26,7 @@ jobs:
           options: '--onefile, --name "HPE_collector_logs.exe", --console,'
 
 
-      - name: Create Executable
+      - name: Create Executable 2
         uses: sayyid5416/pyinstaller@v1
         with:
           python_ver: '3.8'
