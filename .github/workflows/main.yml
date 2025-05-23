@@ -31,7 +31,7 @@ jobs:
         with:
           python_ver: '3.8'
           spec: 'collect.py'
-          requirements: 'requirements_win7'
+          requirements: 'requirements_win7.txt'
           upload_exe_with_name: HPE_collector_logs
           options: '--onefile, --name "HPE_collector_logs_win7.exe", --console,'
 
