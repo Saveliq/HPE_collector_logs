@@ -25,6 +25,16 @@ jobs:
           upload_exe_with_name: HPE_collector_logs
           options: '--onefile, --name "HPE_collector_logs.exe", --console,'
 
+
+      - name: Create Executable
+        uses: sayyid5416/pyinstaller@v1
+        with:
+          python_ver: '3.8'
+          spec: 'collect.py'
+          requirements: 'requirements_win7'
+          upload_exe_with_name: HPE_collector_logs
+          options: '--onefile, --name "HPE_collector_logs_win7.exe", --console,'
+
       - name: Configure git
         run: |
           git config --global user.name "github-actions[bot]"
