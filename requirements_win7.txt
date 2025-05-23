@@ -1,0 +1,21 @@
+altgraph==0.17.4
+certifi==2023.7.22
+charset-normalizer==3.3.2
+decorator==5.2.1
+idna==3.10
+jsonpatch==1.33
+jsonpath-rw==1.4.0
+jsonpointer==3.0.0
+packaging==23.2
+pefile==2023.2.7
+ply==3.11
+pyinstaller==5.13.2
+pyinstaller-hooks-contrib==2023.10
+pywin32-ctypes==0.2.3
+redfish==3.3.1
+requests==2.31.0
+requests-toolbelt==1.0.0
+# requests-unixsocket==0.4.1  # Исключена, так как не используется на Windows
+setuptools==68.2.2
+six==1.17.0
+urllib3==1.26.18
