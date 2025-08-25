@@ -79,10 +79,18 @@ class RedfishClient:
             try:
                 # Логируем начало выхода
                 self._log_info("Выход из клиента")
-                self.client.logout()
-                self._log_info("Выход из клиента выполнен")
+                try:
+                    self.client.logout()  # закрыть Redfish-сессию
+                except Exception as e:
+                    self._log_error(f"Ошибка при logout: {type(e).__name__}: {str(e)}")
+
+                try:
+                    self.client.close()  # закрыть HTTP-сессию (ВАЖНО!)
+                except Exception as e:
+                    self._log_error(f"Ошибка при close: {type(e).__name__}: {str(e)}")
+
+                self._log_info("Клиент полностью закрыт")
             except Exception as e:
-                # Логируем ошибки при выходе
                 self._log_error(f"Ошибка при выходе: {type(e).__name__}: {str(e)}")
 
     def get(self, uri):
@@ -162,13 +170,14 @@ class ServerInfoCollector:
             r"/redfish/v1/Chassis/.*FederatedGroup.*",
             r"/redfish/v1/Chassis/.*Temperatures.*",
             r".*IEL.*",
+            r".*IML.*",
             r".*SL/Entries.*",
             r".*Event/Entries.*",
         ]
-        # URL для коллекции IML-логов
-        self.IML_ENTRIES_URL = self.normalize_url("/redfish/v1/Systems/1/LogServices/IML/Entries/")
-        # Максимальное количество IML-логов для сбора
-        self.MAX_IML_LOGS = 20
+        # # URL для коллекции IML-логов
+        # self.IML_ENTRIES_URL = self.normalize_url("/redfish/v1/Systems/1/LogServices/IML/Entries/")
+        # # Максимальное количество IML-логов для сбора
+        # self.MAX_IML_LOGS = 20
 
     @staticmethod
     def normalize_url(url):
@@ -219,20 +228,20 @@ class ServerInfoCollector:
                 if response and response.status == 200:
                     data = response.dict
                     self.collected_data[normalized_url] = data
-                    if normalized_url == self.IML_ENTRIES_URL:
-                        # Обрабатываем IML-логи, беря последние MAX_IML_LOGS записей
-                        members = data.get("Members", [])[-self.MAX_IML_LOGS:]
-                        for entry in members:
-                            entry_url = self.normalize_url(entry.get("@odata.id", ""))
-                            if entry_url and entry_url not in visited and entry_url not in to_process:
-                                to_process.append(entry_url)
-                    else:
-                        # Извлекаем и добавляем новые ссылки для обработки
-                        links = self.extract_links(data)
-                        for link in links:
-                            normalized_link = self.normalize_url(link)
-                            if normalized_link not in visited and normalized_link not in to_process and self.is_valid_link(normalized_link):
-                                to_process.append(normalized_link)
+                    # if normalized_url == self.IML_ENTRIES_URL:
+                    #     # Обрабатываем IML-логи, беря последние MAX_IML_LOGS записей
+                    #     members = data.get("Members", [])[-self.MAX_IML_LOGS:]
+                    #     for entry in members:
+                    #         entry_url = self.normalize_url(entry.get("@odata.id", ""))
+                    #         if entry_url and entry_url not in visited and entry_url not in to_process:
+                    #             to_process.append(entry_url)
+                    # else:
+                    # Извлекаем и добавляем новые ссылки для обработки
+                    links = self.extract_links(data)
+                    for link in links:
+                        normalized_link = self.normalize_url(link)
+                        if normalized_link not in visited and normalized_link not in to_process and self.is_valid_link(normalized_link):
+                            to_process.append(normalized_link)
             self.client._log_info("Сбор ресурсов завершен")
             print("Сбор данных завершен")
         except Exception as e:
@@ -319,11 +328,11 @@ def process_server(server, output_dir):
         final_dir = os.path.join(output_dir, f"{folder_name}_{timestamp}")
 
         # Собираем IML-логи
-        iml_logs = collector.collect_iml_logs()
+        # iml_logs = collector.collect_iml_logs()
 
         # Сохраняем собранные данные в JSON-файлы
-        with open(os.path.join(temp_dir, "IML_logs.json"), "w", encoding="utf-8") as f:
-            json.dump(iml_logs, f, indent=2, ensure_ascii=False)
+        # with open(os.path.join(temp_dir, "IML_logs.json"), "w", encoding="utf-8") as f:
+        #     json.dump(iml_logs, f, indent=2, ensure_ascii=False)
 
         # Запрашиваем и сохраняем AHS-файл
         ahs_links_args = ["minimalDL=1&&days=1", "days=1", "days=7", "downloadAll=1"]
@@ -355,6 +364,7 @@ def process_server(server, output_dir):
     finally:
         # Выполняем выход из клиента
         client.logout()
+        del client
 
 # Основная функция программы
 def main():
