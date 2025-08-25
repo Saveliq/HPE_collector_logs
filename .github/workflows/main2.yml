@@ -1,4 +1,4 @@
-name: Build and Release Win app for Windows 7 32-bit
+name: Build and Release Win app
 
 on:
   push:
@@ -16,19 +16,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.8 32-bit
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.8'
-          architecture: 'x86'
-
-      - name: Create Executable for Windows 7 32-bit
+      - name: Create Executable (ToExcel_main)
         uses: sayyid5416/pyinstaller@v1
         with:
-          python_ver: '3.8'
-          spec: 'collect.py'
-          requirements: 'requirements_win7.txt'
-          options: '--onefile, --name "HPE_collector_logs_win7_32bit.exe", --console'
+          python_ver: '3.13.2'
+          spec: 'ToExel/main.py'
+          requirements: 'requirements'
+          upload_exe_with_name: ToExcel_main
+          options: '--onefile --name "ToExcel_main.exe" --console --add-data "ToExel;ToExel"'
 
       - name: Configure git
         run: |
@@ -38,7 +33,7 @@ jobs:
       - name: Create and push tag
         id: tagging
         run: |
-          $env:TAG = "v${{ github.run_number }}"
+          $env:TAG ="v${{ github.run_number }}"
           echo "TAG=$TAG" >> $GITHUB_ENV
           git tag $TAG
           git push origin $TAG
@@ -49,6 +44,8 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: Release ${{ env.TAG }}
           generate_release_notes: true
-          files: dist/HPE_collector_logs_win7_32bit.exe
+          files: |
+            dist/HPE_collector_logs.exe
+            dist/ToExcel_main.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

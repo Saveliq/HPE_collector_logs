@@ -25,15 +25,6 @@ jobs:
           upload_exe_with_name: HPE_collector_logs
           options: '--onefile --name "HPE_collector_logs.exe" --console'
 
-      - name: Create Executable (ToExcel_main)
-        uses: sayyid5416/pyinstaller@v1
-        with:
-          python_ver: '3.13.2'
-          spec: 'ToExel/main.py'
-          requirements: 'requirements'
-          upload_exe_with_name: ToExcel_main
-          options: '--onefile --name "ToExcel_main.exe" --console --add-data "ToExel;ToExel"'
-
       - name: Configure git
         run: |
           git config --global user.name "github-actions[bot]"
