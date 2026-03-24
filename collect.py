@@ -335,7 +335,7 @@ def process_server(server, output_dir):
         #     json.dump(iml_logs, f, indent=2, ensure_ascii=False)
 
         # Запрашиваем и сохраняем AHS-файл
-        ahs_links_args = ["days=1", "days=7""]
+        ahs_links_args = ["days=1", "days=7"]
         ahs_filename = f"{folder_name}.ahs"
         ahs_file = os.path.join(temp_dir, ahs_filename)
         ahs_response = None
