@@ -146,34 +146,33 @@ class ServerInfoCollector:
         self.collected_data = {}
         # Регулярные выражения для включения ссылок
         self.INCLUDE_PATTERNS = [
-            r".*"
-#            r"/redfish/v1/Systems(/.*)?",
-#            r"/redfish/v1/Managers(/.*)?",
-#            r"/redfish/v1/Chassis(/.*)?",
-#            r"/redfish/v1/LogServices(/.*)?",
+            r"/redfish/v1/Systems(/.*)?",
+            r"/redfish/v1/Managers(/.*)?",
+            r"/redfish/v1/Chassis(/.*)?",
+            r"/redfish/v1/LogServices(/.*)?",
         ]
         # Регулярные выражения для исключения ссылок
         self.EXCLUDE_PATTERNS = [
-#            r"/redfish/v1/\$metadata",
-#            r"/redfish/v1/odata",
-#            r"/redfish/v1/Schemas(/.*)?",
-#            r"/redfish/v1/JsonSchemas(/.*)?",
-#            r"/redfish/v1/SessionService(/.*)?",
-#            r"/redfish/v1/TelemetryService(/.*)?",
-#            r"/redfish/v1/Registries(/.*)?",
-#            r"/redfish/v1/AccountService(/.*)?",
-#            r"/redfish/v1/EventService(/.*)?",
-#            r"/redfish/v1/Managers/.*DateTime.*",
-#            r"/redfish/v1/Managers/.*Federation.*",
-#            r"/redfish/v1/Managers/.*Service.*",
-#            r"/redfish/v1/Managers/.*VirtualMedia.*",
-#            r"/redfish/v1/Chassis/.*PowerMeter.*",
-#            r"/redfish/v1/Chassis/.*FederatedGroup.*",
-#            r"/redfish/v1/Chassis/.*Temperatures.*",
-#            r".*IEL.*",
-#            r".*IML.*",
-#            r".*SL/Entries.*",
-#            r".*Event/Entries.*",
+            r"/redfish/v1/\$metadata",
+            r"/redfish/v1/odata",
+            r"/redfish/v1/Schemas(/.*)?",
+            r"/redfish/v1/JsonSchemas(/.*)?",
+            r"/redfish/v1/SessionService(/.*)?",
+            r"/redfish/v1/TelemetryService(/.*)?",
+            r"/redfish/v1/Registries(/.*)?",
+            r"/redfish/v1/AccountService(/.*)?",
+            r"/redfish/v1/EventService(/.*)?",
+            r"/redfish/v1/Managers/.*DateTime.*",
+            r"/redfish/v1/Managers/.*Federation.*",
+            r"/redfish/v1/Managers/.*Service.*",
+            r"/redfish/v1/Managers/.*VirtualMedia.*",
+            r"/redfish/v1/Chassis/.*PowerMeter.*",
+            r"/redfish/v1/Chassis/.*FederatedGroup.*",
+            r"/redfish/v1/Chassis/.*Temperatures.*",
+            r".*IEL.*",
+            r".*IML.*",
+            r".*SL/Entries.*",
+            r".*Event/Entries.*",
         ]
         # # URL для коллекции IML-логов
         # self.IML_ENTRIES_URL = self.normalize_url("/redfish/v1/Systems/1/LogServices/IML/Entries/")
