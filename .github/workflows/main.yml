@@ -21,7 +21,7 @@ jobs:
         with:
           python_ver: '3.13.2'
           spec: 'collect.py'
-          requirements: 'requirements'
+          requirements: 'requirements.txt'
           upload_exe_with_name: HPE_collector_logs
           options: '--onefile --name "HPE_collector_logs.exe" --console'
 
@@ -30,7 +30,7 @@ jobs:
         with:
           python_ver: '3.13.2'
           spec: 'ToExel/main.py'
-          requirements: 'requirements'
+          requirements: 'requirements.txt'
           upload_exe_with_name: ToExcel_main
           options: '--onefile --name "ToExcel_main.exe" --console --add-data "ToExel;ToExel"'
 

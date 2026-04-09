@@ -21,7 +21,7 @@ jobs:
         with:
           python_ver: '3.13.2'
           spec: 'collect.py'
-          requirements: 'requirements'
+          requirements: 'requirements.txt'
           upload_exe_with_name: HPE_collector_logs
           options: '--onefile --name "HPE_collector_logs.exe" --console'
 

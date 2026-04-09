@@ -7,6 +7,7 @@ def get_memory(json_data):
     def _get(data, id_node):
         node_result = {}
         node_result["DIMMStatus"] = search_one(data, r"DIMMStatus")
+        node_result["SerialNumber"] = search_one(data, r"SerialNumber")
         node_result["Technology"] = search_one(data,  value_pattern=r".*DDR.*")
         node_result["Manufacturer"] = search_one(data, r"Manufacturer")
         node_result["Frequency"] = search_one(data, r"MaximumFrequencyMHz") if search_one(data, r"MaximumFrequencyMHz") else search_one(data, r"MaxOperatingSpeedMTs")
