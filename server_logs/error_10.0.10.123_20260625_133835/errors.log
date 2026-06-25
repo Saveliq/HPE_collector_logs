@@ -1,0 +1,128 @@
+2026-06-25 13:38:35.924754 - INFO - Сервер 10.0.10.123 - Создание клиента Redfish для https://10.0.10.123
+2026-06-25 13:42:38.495569 - ERROR - Сервер 10.0.10.123 - Неизвестная ошибка при создании клиента: RetriesExhaustedError: 
+Полный стек: Traceback (most recent call last):
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\urllib3\connection.py", line 198, in _new_conn
+    sock = connection.create_connection(
+        (self._dns_host, self.port),
+    ...<2 lines>...
+        socket_options=self.socket_options,
+    )
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\urllib3\util\connection.py", line 85, in create_connection
+    raise err
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\urllib3\util\connection.py", line 73, in create_connection
+    sock.connect(sa)
+    ~~~~~~~~~~~~^^^^
+TimeoutError: [WinError 10060] Попытка установить соединение была безуспешной, т.к. от другого компьютера за требуемое время не получен нужный отклик, или было разорвано уже установленное соединение из-за неверного отклика уже подключенного компьютера
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\urllib3\connectionpool.py", line 787, in urlopen
+    response = self._make_request(
+        conn,
+    ...<10 lines>...
+        **response_kw,
+    )
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\urllib3\connectionpool.py", line 488, in _make_request
+    raise new_e
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\urllib3\connectionpool.py", line 464, in _make_request
+    self._validate_conn(conn)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\urllib3\connectionpool.py", line 1093, in _validate_conn
+    conn.connect()
+    ~~~~~~~~~~~~^^
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\urllib3\connection.py", line 704, in connect
+    self.sock = sock = self._new_conn()
+                       ~~~~~~~~~~~~~~^^
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\urllib3\connection.py", line 207, in _new_conn
+    raise ConnectTimeoutError(
+    ...<2 lines>...
+    ) from e
+urllib3.exceptions.ConnectTimeoutError: (<urllib3.connection.HTTPSConnection object at 0x0000028BF10823C0>, 'Connection to 10.0.10.123 timed out. (connect timeout=None)')
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\requests\adapters.py", line 667, in send
+    resp = conn.urlopen(
+        method=request.method,
+    ...<9 lines>...
+        chunked=chunked,
+    )
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\urllib3\connectionpool.py", line 841, in urlopen
+    retries = retries.increment(
+        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
+    )
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\urllib3\util\retry.py", line 519, in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='10.0.10.123', port=443): Max retries exceeded with url: /redfish/v1 (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x0000028BF10823C0>, 'Connection to 10.0.10.123 timed out. (connect timeout=None)'))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\redfish\rest\v1.py", line 939, in _rest_request
+    resp = self._session.request(method.upper(), "{}{}".format(self.__base_url, reqpath), data=body,
+                                 headers=headers, timeout=timeout, allow_redirects=allow_redirects,
+                                 verify=verify, proxies=self._proxies, params=query_str)
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\requests\sessions.py", line 589, in request
+    resp = self.send(prep, **send_kwargs)
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\requests\sessions.py", line 703, in send
+    r = adapter.send(request, **kwargs)
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\requests\adapters.py", line 688, in send
+    raise ConnectTimeout(e, request=request)
+requests.exceptions.ConnectTimeout: HTTPSConnectionPool(host='10.0.10.123', port=443): Max retries exceeded with url: /redfish/v1 (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x0000028BF10823C0>, 'Connection to 10.0.10.123 timed out. (connect timeout=None)'))
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "c:\Users\AChuiko\Documents\git\HPE_collector_logs\collect.py", line 36, in __init__
+    self.client = redfish.redfish_client(
+                  ~~~~~~~~~~~~~~~~~~~~~~^
+        base_url=base_url,
+        ^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        default_prefix="/redfish/v1"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\redfish\rest\v1.py", line 1204, in redfish_client
+    return HttpClient(base_url=base_url, username=username, password=password,
+                        default_prefix=default_prefix, sessionkey=sessionkey,
+                        capath=capath, cafile=cafile, timeout=timeout,
+                        max_retry=max_retry, proxies=proxies, check_connectivity=check_connectivity)
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\redfish\rest\v1.py", line 1108, in __init__
+    super(HttpClient, self).__init__(base_url, username=username,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        password=password, default_prefix=default_prefix,
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+                        max_retry=max_retry, proxies=proxies,
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        check_connectivity=check_connectivity)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\redfish\rest\v1.py", line 519, in __init__
+    self.get_root_object()
+    ~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\redfish\rest\v1.py", line 611, in get_root_object
+    raise excp
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\redfish\rest\v1.py", line 609, in get_root_object
+    resp = self.get(self.default_prefix)
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\redfish\rest\v1.py", line 657, in get
+    return self._rest_request(path, method='GET', args=args,
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                        headers=headers, timeout=timeout, max_retry=max_retry)
+                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\redfish\rest\v1.py", line 1146, in _rest_request
+    return super(HttpClient, self)._rest_request(path=path, method=method,
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                                 args=args, body=body,
+                                                 ^^^^^^^^^^^^^^^^^^^^^
+                                                 headers=headers,
+                                                 ^^^^^^^^^^^^^^^^
+                                                 allow_redirects=allow_redirects, timeout=timeout, max_retry=max_retry)
+                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AChuiko\Documents\git\HPE_collector_logs\.venv\Lib\site-packages\redfish\rest\v1.py", line 987, in _rest_request
+    raise RetriesExhaustedError() from cause_exception
+redfish.rest.v1.RetriesExhaustedError
+

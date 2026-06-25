@@ -1,0 +1,41 @@
+2026-06-25 13:49:09.699914 - INFO - Сервер 172.24.6.11 - Клиент успешно создан
+2026-06-25 13:49:09.700594 - INFO - Сервер 172.24.6.11 - Проверка валидности SSO токена в iLO...
+2026-06-25 13:49:09.724467 - INFO - Сервер 172.24.6.11 - Клиент успешно создан
+2026-06-25 13:49:09.725283 - INFO - Сервер 172.24.6.11 - Проверка валидности SSO токена в iLO...
+2026-06-25 13:49:09.736236 - INFO - Сервер 172.24.6.11 - SSO токен успешно валидирован iLO
+2026-06-25 13:49:09.738611 - ERROR - Сервер 172.24.6.11 - Ошибка обработки сервера: FileNotFoundError: [Errno 2] No such file or directory: 'server_logs\\temp_172.24.6.11_20260625_134908\\server_info.json'
+Полный стек: Traceback (most recent call last):
+  File "c:\Users\AChuiko\Documents\git\HPE_collector_logs\CollectFromOV\collectfromOV.py", line 310, in process_server
+    collector.collect_resources(output_file=server_info_file)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\AChuiko\Documents\git\HPE_collector_logs\CollectFromOV\collectfromOV.py", line 173, in collect_resources
+    file_handle = open(output_file, "w", encoding="utf-8") if output_file else None
+                  ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'server_logs\\temp_172.24.6.11_20260625_134908\\server_info.json'
+
+2026-06-25 13:49:09.739490 - INFO - Сервер 172.24.6.11 - Закрытие сессии скрипта (очистка данных клиента)
+2026-06-25 13:49:09.746934 - INFO - Сервер 172.24.6.11 - SSO токен успешно валидирован iLO
+2026-06-25 13:49:09.748325 - ERROR - Сервер 172.24.6.11 - Ошибка обработки сервера: FileNotFoundError: [Errno 2] No such file or directory: 'server_logs\\temp_172.24.6.11_20260625_134908\\server_info.json'
+Полный стек: Traceback (most recent call last):
+  File "c:\Users\AChuiko\Documents\git\HPE_collector_logs\CollectFromOV\collectfromOV.py", line 310, in process_server
+    collector.collect_resources(output_file=server_info_file)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\AChuiko\Documents\git\HPE_collector_logs\CollectFromOV\collectfromOV.py", line 173, in collect_resources
+    file_handle = open(output_file, "w", encoding="utf-8") if output_file else None
+                  ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'server_logs\\temp_172.24.6.11_20260625_134908\\server_info.json'
+
+2026-06-25 13:49:09.749082 - INFO - Сервер 172.24.6.11 - Закрытие сессии скрипта (очистка данных клиента)
+2026-06-25 13:50:14.509667 - ERROR - Сервер 172.24.6.11 - iLO отклонил токен OneView. Код ответа: 401
+2026-06-25 13:50:14.527588 - INFO - Сервер 172.24.6.11 - SSO токен успешно валидирован iLO
+2026-06-25 13:50:14.529371 - ERROR - Сервер 172.24.6.11 - Ошибка обработки сервера: FileNotFoundError: [Errno 2] No such file or directory: 'server_logs\\temp_172.24.6.11_20260625_135013\\server_info.json'
+Полный стек: Traceback (most recent call last):
+  File "c:\Users\AChuiko\Documents\git\HPE_collector_logs\CollectFromOV\collectfromOV.py", line 310, in process_server
+    server_info_file = os.path.join(temp_dir, "server_info.json")
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\AChuiko\Documents\git\HPE_collector_logs\CollectFromOV\collectfromOV.py", line 173, in collect_resources
+    file_handle = open(output_file, "w", encoding="utf-8") if output_file else None
+                  ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'server_logs\\temp_172.24.6.11_20260625_135013\\server_info.json'
+
+2026-06-25 13:50:14.530116 - INFO - Сервер 172.24.6.11 - Закрытие сессии скрипта (очистка данных клиента)
