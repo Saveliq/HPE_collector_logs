@@ -1,0 +1,48 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Virtual environments and local environment variables
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+!.env.template
+
+# Python packaging and PyInstaller output
+build/
+dist/
+*.egg-info/
+*.spec
+*.exe
+/Collect*/Collect*.7z
+
+# Collector output and temporary files extracted by ToExel
+server_logs/
+*.log
+tmp/
+Аудит_результаты.xlsx
+
+# Local server lists and OneView configuration
+# Already tracked files are not affected by these rules.
+servers.csv
+ov_config.csv
+
+# Editor and operating system files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+~$*
+.DS_Store
+Thumbs.db
+Desktop.ini

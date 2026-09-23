@@ -61,7 +61,7 @@ class RedfishClient:
         try:
             # Логируем попытку авторизации
             self._log_info("Попытка авторизации")
-            self.client.login()
+            self.client.login(auth=redfish.rest.v1.AuthMethod.BASIC)
             self._log_info("Авторизация успешно выполнена")
             return True
         except redfish.rest.v1.InvalidCredentialsError as e:
@@ -182,6 +182,8 @@ class ServerInfoCollector:
     @staticmethod
     def normalize_url(url):
         # Удаляет завершающий слеш из URL
+        if not isinstance(url, str):
+            return None
         return url.rstrip('/')
 
     @staticmethod
@@ -189,8 +191,9 @@ class ServerInfoCollector:
         # Извлекает все ссылки (@odata.id) из данных
         result = []
         if isinstance(data, dict):
-            if "@odata.id" in data:
-                result.append(ServerInfoCollector.normalize_url(data["@odata.id"]))
+            odata_id = data.get("@odata.id")
+            if isinstance(odata_id, str) and odata_id:
+                result.append(ServerInfoCollector.normalize_url(odata_id))
             for value in data.values():
                 result.extend(ServerInfoCollector.extract_links(value))
         elif isinstance(data, list):

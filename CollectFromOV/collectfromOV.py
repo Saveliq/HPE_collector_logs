@@ -3,6 +3,8 @@ import urllib3
 import os
 import re
 import csv
+import getpass
+import shlex
 import traceback
 import redfish
 from hpOneView.oneview_client import OneViewClient
@@ -141,14 +143,17 @@ class ServerInfoCollector:
 
     @staticmethod
     def normalize_url(url):
+        if not isinstance(url, str):
+            return None
         return url.rstrip('/')
 
     @staticmethod
     def extract_links(data):
         result = []
         if isinstance(data, dict):
-            if "@odata.id" in data:
-                result.append(ServerInfoCollector.normalize_url(data["@odata.id"]))
+            odata_id = data.get("@odata.id")
+            if isinstance(odata_id, str) and odata_id:
+                result.append(ServerInfoCollector.normalize_url(odata_id))
             for value in data.values():
                 result.extend(ServerInfoCollector.extract_links(value))
         elif isinstance(data, list):
@@ -200,18 +205,21 @@ class ServerInfoCollector:
 def read_ov_configs_from_csv(csv_file):
     """
     Читает ВСЕ конфигурации OneView из CSV файла и возвращает их списком.
+
+    В CSV хранится только адрес (колонка 'ip').
+    Логин и пароль запрашиваются через консоль (см. prompt_for_credentials).
     """
     configs = []
     try:
         with open(csv_file, newline='', encoding='utf-8') as csvfile:
             reader = csv.DictReader(csvfile)
             for row in reader:
-                if 'ip' in row and 'username' in row and 'password' in row:
+                if 'ip' in row:
                     configs.append({
                         "ip": row['ip'].strip(),
                         "credentials": {
-                            "userName": row['username'].strip(),
-                            "password": row['password'].strip()
+                            "userName": None,  # будет заполнено из консоли
+                            "password": None   # будет заполнено из консоли
                         }
                     })
         return configs
@@ -221,6 +229,99 @@ def read_ov_configs_from_csv(csv_file):
     except Exception as e:
         print(f"Ошибка чтения CSV файла конфигурации OneView: {e}")
         return []
+
+
+def build_oneview_credentials(username, password, auth_login_domain='LOCAL'):
+    """Сохраняет логин целиком; каталог OneView задаётся отдельно от домена UPN."""
+    auth_login_domain = auth_login_domain.strip() or 'LOCAL'
+    if auth_login_domain.upper() == 'LOCAL':
+        auth_login_domain = 'LOCAL'
+    return {
+        'userName': username.strip(),
+        'password': password,
+        'authLoginDomain': auth_login_domain,
+    }
+
+
+def prompt_oneview_login_domain(username):
+    """Для логина без @ выбирает LOCAL, для UPN запрашивает каталог OneView."""
+    if '@' not in username:
+        return 'LOCAL'
+
+    while True:
+        auth_login_domain = input("Название домена (каталога авторизации) в OneView: ").strip()
+        if auth_login_domain:
+            return auth_login_domain
+        print("Введите имя каталога со страницы входа OneView; поле не может быть пустым.")
+
+
+def prompt_for_credentials(ov_configs):
+    """
+    Запрашивает логин и пароль для подключения к OneView через консоль.
+
+    Предлагает два режима:
+      1) ввести одни учетные данные для всего оборудования;
+      2) вводить учетные данные отдельно для каждого OneView.
+
+    Для логина без @ использует LOCAL; для логина с @ запрашивает каталог отдельно.
+    Сохраняет логин целиком.
+    """
+    print("\nКак использовать учетные данные для подключения к OneView?")
+    print("  1 - ввести ОДНИ учетные данные для ВСЕГО оборудования")
+    print("  2 - вводить учетные данные ОТДЕЛЬНО для каждого оборудования")
+    print("  Для логина без @ (например, Administrator) автоматически используется каталог LOCAL.")
+    print("  Для логина с @ отдельно запрашивается имя каталога со страницы входа OneView.")
+    print("  Имя каталога может отличаться от домена в логине user@domain.")
+    print("  Доменный логин вводите целиком, например user@domain.")
+
+    mode = ""
+    while mode not in ("1", "2"):
+        mode = input("Выберите режим (1/2): ").strip()
+        if mode not in ("1", "2"):
+            print("Некорректный ввод. Введите 1 или 2.")
+
+    if mode == "1":
+        username = input("Введите логин для всего оборудования: ").strip()
+        auth_login_domain = prompt_oneview_login_domain(username)
+        password = getpass.getpass("Введите пароль для всего оборудования: ")
+        for config in ov_configs:
+            config['credentials'] = build_oneview_credentials(username, password, auth_login_domain)
+        print(f"Учетные данные установлены для всех {len(ov_configs)} OneView.\n")
+    else:
+        for index, config in enumerate(ov_configs, 1):
+            ov_ip = config['ip']
+            print(f"\n[{index}/{len(ov_configs)}] OneView: {ov_ip}")
+            username = input("  Логин: ").strip()
+            auth_login_domain = prompt_oneview_login_domain(username)
+            password = getpass.getpass("  Пароль: ")
+            config['credentials'] = build_oneview_credentials(username, password, auth_login_domain)
+        print(f"\nУчетные данные установлены для всех {len(ov_configs)} OneView.\n")
+
+    return ov_configs
+
+
+def print_oneview_login_curl(config):
+    """Печатает эквивалент запроса авторизации для Bash, скрывая пароль."""
+    credentials = dict(config['credentials'])
+    credentials['password'] = '***'
+    credentials.pop('sessionID', None)
+    # hpOneView добавляет это поле перед отправкой запроса авторизации.
+    credentials['loginMsgAck'] = True
+    api_version = config.get('api_version', OneViewClient.DEFAULT_API_VERSION)
+    command = ['curl']
+    if config.get('ssl_certificate'):
+        command.extend(['--cacert', config['ssl_certificate']])
+    else:
+        command.append('-k')
+    command.extend([
+        '-v', '-X', 'POST', f"https://{config['ip']}/rest/login-sessions",
+        '--header', 'Content-Type: application/json',
+        '--header', 'Accept: application/json',
+        '--header', f'X-API-Version: {api_version}',
+        '--data', json.dumps(credentials, ensure_ascii=False),
+    ])
+    print('  Запрос авторизации OneView (curl для Bash; пароль скрыт):')
+    print('  ' + ' '.join(shlex.quote(argument) for argument in command), flush=True)
 
 
 def get_all_servers_from_ov(oneview_client, ov_ip):
@@ -349,6 +450,9 @@ def main():
         print(f"Критическая ошибка: Не найдено ни одной конфигурации OneView в {OV_CSV_FILE}.")
         return
 
+    # Запрашиваем пароли через консоль (в CSV хранятся только адрес и логин)
+    prompt_for_credentials(ov_configs)
+
     # Запрашиваем настройки потоков один раз в начале
     max_workers_input = DEFAULT_MAX_WORKERS
     try:
@@ -375,6 +479,7 @@ def main():
         print(f"=======================================================")
         
         try:
+            print_oneview_login_curl(config)
             oneview_client = OneViewClient(config)
             # Собираем серверы только из текущего OneView
             servers_from_ov = get_all_servers_from_ov(oneview_client, ov_ip)
