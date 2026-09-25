@@ -1,6 +1,7 @@
 import re
 
 from search import search_one, stripJSON
+from getFromJSON.getDiagnostics import component_fields
 
 
 def get_processors(json_data):
@@ -13,6 +14,7 @@ def get_processors(json_data):
         node_result["Manufacturer"] = search_one(data, r"Manufacturer")
         node_result["State"] = search_one(data, r"State", path_pattern=r"Status")
         node_result["Health"] = search_one(data, r"Health", path_pattern=r"Status")
+        node_result.update(component_fields(data))
         return node_result
 
     result = []

@@ -14,10 +14,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed  # Для мно
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
-# Класс для взаимодействия с Redfish API (прямая авторизация в iLO по логину/паролю)
+# Класс для взаимодействия с Redfish API (прямая авторизация в ibmc по логину/паролю)
 class RedfishClient:
     # Таймаут одного HTTP-запроса (сек) и число повторов — чтобы недоступные
-    # iLO не подвешивали поток на минуты, а быстро отбраковывались.
+    # ibmc не подвешивали поток на минуты, а быстро отбраковывались.
     CONNECT_TIMEOUT = 15
     MAX_RETRY = 2
 
@@ -164,56 +164,22 @@ class ServerInfoCollector:
         self.collected_data = {}
         # Регулярные выражения для включения ссылок — разрешаем все элементы Redfish
         self.INCLUDE_PATTERNS = [
-            r"/redfish/v1/?$",
-            r"/redfish/v1/Systems(/.*)?",
-            r"/redfish/v1/Chassis(/.*)?",
-            r"/redfish/v1/Managers(/.*)?",
-            r"/redfish/v1/UpdateService(/.*)?",   # FirmwareInventory раскрыт полностью
+            r"/redfish/v1(/.*)?",
         ]
+        # Регулярные выражения для исключения ссылок — ничего не исключаем
         self.EXCLUDE_PATTERNS = [
-            # --- протокол/схемы (на случай полного обхода) ---
-            r"/redfish/v1/\$metadata",
-            r"/redfish/v1/odata",
-            r"/redfish/v1/Schemas(/.*)?",
-            r"/redfish/v1/JsonSchemas(/.*)?",
-            r"/redfish/v1/Registries(/.*)?",
-            r"/redfish/v1/SessionService(/.*)?",
-            r"/redfish/v1/AccountService(/.*)?",
-            r"/redfish/v1/EventService(/.*)?",
-            r"/redfish/v1/TaskService(/.*)?",
-            r"/redfish/v1/TelemetryService(/.*)?",
-            # --- Huawei: history / usage (time-series, не состояние) ---
-            r"/redfish/v1/.*HistoryUsageRate.*",
-            r"/redfish/v1/.*/Power/PowerHistoryData.*",
-            r"/redfish/v1/.*/Thermal/InletHistoryTemperature.*",
-            # --- журналы: индексы оставляем, записи режем ---
-            r"/redfish/v1/.*/LogServices/.+/Entries(/.*)?",
-            # --- сервисы управления/конфигурации iBMC (не состояние железа) ---
-            r"/redfish/v1/Managers/.*/SPService(/.*)?",       # Smart Provisioning: деплой/RAID-действия
-            r"/redfish/v1/Managers/.*/KvmService(/.*)?",
-            r"/redfish/v1/Managers/.*/VncService(/.*)?",
-            r"/redfish/v1/Managers/.*/SnmpService(/.*)?",
-            r"/redfish/v1/Managers/.*/SyslogService(/.*)?",
-            r"/redfish/v1/Managers/.*/SmtpService(/.*)?",
-            r"/redfish/v1/Managers/.*/NtpService(/.*)?",
-            r"/redfish/v1/Managers/.*/LldpService(/.*)?",
-            r"/redfish/v1/Managers/.*/FDMService(/.*)?",
-            r"/redfish/v1/Managers/.*/FPCService(/.*)?",
-            r"/redfish/v1/Managers/.*/SmsService(/.*)?",
-            r"/redfish/v1/Managers/.*/DiagnosticService(/.*)?",
-            r"/redfish/v1/Managers/.*/SecurityService(/.*)?",  # + HttpsCert
-            r"/redfish/v1/Managers/.*/NetworkProtocol(/.*)?",
-            # --- host-сетевые конфиг-объекты (дубли/пусто) ---
-            r"/redfish/v1/Systems/.*/NetworkBondings(/.*)?",
-            r"/redfish/v1/Systems/.*/NetworkBridge(/.*)?",
-            r"/redfish/v1/Systems/.*/InfiniBandInterfaces(/.*)?",
-            # --- фрагмент-дубли PCIe-функций (сами устройства оставляем) ---
-            r"/redfish/v1/.*/PCIeDevices/.+/Functions(/.*)?",
+            r'/redfish/v1/AccountService(/.*)?',
+            r'JSONSchemas(/.*)?',
+            r'/redfish/v1/Chassis/1/Thermal/InletHistoryTemperature',
+            r'/redfish/v1/Chassis/1/Thermal(/.*)?',
+            r'^/redfish/v1/.*#/',
         ]
 
     @staticmethod
     def normalize_url(url):
-        # Удаляет завершающий слеш из URL
+        # Удаляет завершающий слеш из URL.
+        # Защита от некорректных значений (например, "@odata.id": null),
+        # чтобы сбор не прерывался на нестроковых ссылках.
         if not isinstance(url, str):
             return None
         return url.rstrip('/')
@@ -223,6 +189,7 @@ class ServerInfoCollector:
         # Извлекает все ссылки (@odata.id) из данных
         result = []
         if isinstance(data, dict):
+            # Берём ссылку только если это непустая строка (у части серверов встречается null)
             odata_id = data.get("@odata.id")
             if isinstance(odata_id, str) and odata_id:
                 result.append(ServerInfoCollector.normalize_url(odata_id))
@@ -236,6 +203,8 @@ class ServerInfoCollector:
     def is_valid_link(self, link):
         # Проверяет, соответствует ли ссылка паттернам включения и не попадает под исключения
         normalized_link = self.normalize_url(link)
+        if not normalized_link:
+            return False
         for pattern in self.EXCLUDE_PATTERNS:
             if re.match(pattern, normalized_link):
                 return False
@@ -282,7 +251,7 @@ class ServerInfoCollector:
                 file_handle.close()
 
 
-# Читает список серверов (iLO) из CSV-файла. В CSV только колонка 'ip'.
+# Читает список серверов (ibmc) из CSV-файла. В CSV только колонка 'ip'.
 def read_servers_from_csv(csv_file):
     servers = []
     try:
@@ -310,7 +279,7 @@ def read_servers_from_csv(csv_file):
 
 # Запрашивает логин и пароль через консоль: одни на все серверы или отдельно для каждого
 def prompt_for_credentials(servers):
-    print("\nКак использовать учетные данные для подключения к iLO?")
+    print("\nКак использовать учетные данные для подключения к ibmc?")
     print("  1 - ввести ОДНИ учетные данные для ВСЕГО оборудования")
     print("  2 - вводить учетные данные ОТДЕЛЬНО для каждого оборудования")
 
@@ -332,7 +301,7 @@ def prompt_for_credentials(servers):
         # Свои учетные данные для каждого сервера
         for index, server in enumerate(servers, 1):
             ip = server['ip']
-            print(f"\n[{index}/{len(servers)}] iLO: {ip}")
+            print(f"\n[{index}/{len(servers)}] ibmc: {ip}")
             server['username'] = input("  Логин: ").strip()
             server['password'] = getpass.getpass("  Пароль: ")
         print(f"\nУчетные данные установлены для всех {len(servers)} серверов.\n")
@@ -397,13 +366,13 @@ def process_server(server, output_dir):
 # Основная функция программы
 def main():
     # Константы
-    CSV_FILE = "servers.csv"      # Файл со списком iLO (только колонка 'ip')
+    CSV_FILE = "servers.csv"      # Файл со списком ibmc (только колонка 'ip')
     OUTPUT_DIR = "server_logs"    # Папка для сохранения логов
     DEFAULT_MAX_WORKERS = 10      # Количество потоков по умолчанию
 
     # Создаем выходную папку, если она не существует
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    print("Запуск полного сбора ресурсов Redfish (прямая авторизация в iLO)")
+    print("Запуск полного сбора ресурсов Redfish (прямая авторизация в ibmc)")
 
     # 1. Читаем список серверов из CSV
     servers = read_servers_from_csv(CSV_FILE)

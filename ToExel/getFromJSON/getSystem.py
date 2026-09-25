@@ -3,7 +3,16 @@ from search import search_one, stripJSON
 
 def get_system(json_data):
     result = {}
-    data = json_data['/redfish/v1/Systems/1']
+    data = json_data.get('/redfish/v1/Systems/1', {})
+    status = data.get("Status") or {}
+    oem = data.get("Oem") or {}
+    hpe = oem.get("Hpe") or oem.get("Hp") or {}
+    result["ServerHealth"] = status.get("Health")
+    result["ServerState"] = status.get("State")
+    result["ServerHealthRollup"] = status.get("HealthRollup")
+    result["PowerState"] = data.get("PowerState")
+    result["PowerRegulatorMode"] = hpe.get("PowerRegulatorMode")
+    result["PowerAutoOn"] = hpe.get("PowerAutoOn")
     result["BiosVersion"] = search_one(data, r"BiosVersion")
     result["MemorySummary"] = search_one(data, r"HealthRollup", path_pattern="MemorySummary")
     result["TotalSystemMemoryGiB"] = search_one(data, r"TotalSystemMemoryGiB", path_pattern="MemorySummary")

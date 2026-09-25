@@ -153,7 +153,7 @@ def search_one(
 
 def stripJSON(json_data):
     if not type(json_data) is dict and not type(json_data) is set and not type(json_data) is list:
-        return str(json_data).strip()
+        return json_data.strip() if isinstance(json_data, str) else json_data
     if type(json_data) is list:
         for i in range(len(json_data)):
             json_data[i] = stripJSON(json_data[i])

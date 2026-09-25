@@ -1,6 +1,7 @@
 import re
 
 from search import search_one, stripJSON
+from getFromJSON.getDiagnostics import component_fields
 
 
 def get_power(json_data):
@@ -14,6 +15,7 @@ def get_power(json_data):
         node_result["PowerCapacityWatts"] = search_one(data, r"PowerCapacityWatts")
         node_result["State"] = search_one(data, r"State", path_pattern="Status")
         node_result["Health"] = search_one(data, r"Health", path_pattern="Status")
+        node_result.update(component_fields(data))
         return node_result
 
     result = []
@@ -26,7 +28,7 @@ def get_power(json_data):
         if isinstance(data, dict) and isinstance(data.get("PowerSupplies"), list):
             for power_supply in data["PowerSupplies"]:
                 result.append(_parse_power_supply(power_supply))
-        elif isinstance(data, dict):
+        elif isinstance(data, dict) and ("PowerSupplyType" in data or "SerialNumber" in data):
             result.append(_parse_power_supply(data))
 
     return stripJSON(result)

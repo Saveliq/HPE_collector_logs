@@ -1,6 +1,7 @@
 import re
 
 from search import search_one, stripJSON
+from getFromJSON.getDiagnostics import component_fields
 
 Disks = []
 def get_array_controllers(json_data):
@@ -28,6 +29,7 @@ def get_array_controllers(json_data):
         node_result["Health"] = search_one(data, r"Health", path_pattern="Status")
         node_result["State"] = search_one(data, r"State", path_pattern="Status")
         node_result["SerialNumber"] = search_one(data, r"SerialNumber")
+        node_result.update(component_fields(data))
         return node_result
     def _get(data, id_node):
         global Disks
@@ -44,6 +46,7 @@ def get_array_controllers(json_data):
         node_result["SerialNumber"] = search_one(data, r"SerialNumber")
         node_result["State"] = search_one(data, r"State", path_pattern=r"Status")
         node_result["Health"] = search_one(data, r"Health", path_pattern=r"Status")
+        node_result.update(component_fields(data))
         disk_drives = match_by_pattern(json_data, rf".*/ArrayControllers/{id_node}/DiskDrives/\d+(-\d+)?$", "Disk", func=sub_DiskDrives)
         node_result["DiskDrives"] = disk_drives
         Disks += disk_drives
@@ -51,7 +54,6 @@ def get_array_controllers(json_data):
                                        func=sub_DiskDrives)
         node_result["DiskDrives"] += unconfigdisk_drives
         Disks += unconfigdisk_drives
-        print(Disks)
         disk_logical_drives = match_by_pattern(json_data, rf".*/ArrayControllers/{id_node}/LogicalDrives/\d+(-\d+)?$", "Logical_Disk",
                                        func=sub_LogicalDrives)
         node_result["LogicalDiskDrives"] = disk_logical_drives
@@ -65,7 +67,7 @@ def get_array_controllers(json_data):
         }
         ind = 0
         for key, _data in nodes.items():
-            result.append(func(_data, int(key[-1])))
+            result.append(func(_data, key.rsplit("/", 1)[-1]))
         return result
 
 

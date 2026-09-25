@@ -3,6 +3,9 @@ import os
 import json
 from pathlib import Path
 from openpyxl import Workbook
+from openpyxl.styles import Alignment
+from diagnostic_sheets import display_value, format_status_colors
+from getFromJSON.getDiagnostics import get_diagnostics
 
 
 # === CONFIGURATION ===
@@ -133,6 +136,7 @@ def _write_component_row(
     description="",
     quantity=1,
     comment="",
+    telemetry=None,
 ):
     normalized_part_number = _normalize_part_number(part_number, spare_part_number, component_name)
 
@@ -143,6 +147,9 @@ def _write_component_row(
     ws.cell(row=row, column=6, value=_to_text(description))
     ws.cell(row=row, column=7, value=quantity)
     ws.cell(row=row, column=8, value=_to_text(comment))
+    telemetry = telemetry or {}
+    for column, field in enumerate(("FirmwareVersion", "State", "Health", "HealthRollup", "TemperatureCelsius", "DIMMStatus"), 9):
+        ws.cell(row=row, column=column, value=display_value(telemetry.get(field)))
     _register_pn_summary(normalized_part_number, component_name, description)
     return row + 1
 
@@ -197,10 +204,11 @@ def write_proc_info(ws, server_data, start_row, start_col):
                 description=description,
                 quantity=1,
                 comment=str(comment),
+                telemetry=processor,
             )
         return (start_row, 5)
 
-    processor_model = _to_text(server_data.get("ProcessorModel"), "Процессор")
+    processor_model = _to_text(server_data.get("ProcessorModel"))
     try:
         processor_count = int(server_data.get("ProcessorCount") or 0)
     except (TypeError, ValueError):
@@ -216,7 +224,7 @@ def write_proc_info(ws, server_data, start_row, start_col):
             serial_number=f"CPU_NO_SN_{index}",
             part_number="",
             component_name="Процессор",
-            description=processor_model,
+            description=processor_model or "Процессор",
             quantity=1,
             comment="Серийный номер не найден в источнике",
         )
@@ -236,6 +244,7 @@ def write_NIC_info(ws, server_data, start_row, start_col):
             description=nic.get("Name"),
             quantity=1,
             comment=str({"Model": nic.get("Model"), "FirmwareVersion": nic.get("FirmwareVersion")}),
+            telemetry=nic,
         )
 
     return (start_row, 5)
@@ -262,6 +271,7 @@ def write_RAID_info(ws, server_data, start_row, start_col):
             description=str(description),
             quantity=1,
             comment=str(comment),
+            telemetry=raid,
         )
 
         if raid.get("BackupPowerSourceStatus") == "Present":
@@ -304,6 +314,7 @@ def write_MEM_info(ws, server_data, start_row, start_col):
             description=str(description),
             quantity=1,
             comment=dimm.get("Manufacturer"),
+            telemetry=dimm,
         )
 
     return (start_row, 5)
@@ -329,6 +340,7 @@ def write_PSU_info(ws, server_data, start_row, start_col):
             description=str(description),
             quantity=1,
             comment=str(comment),
+            telemetry=psu,
         )
 
     return (start_row, 5)
@@ -357,12 +369,13 @@ def write_DISK_info(ws, server_data, start_row, start_col):
             description=str(description),
             quantity=1,
             comment=str(comment),
+            telemetry=disk,
         )
 
     return (start_row, 5)
 
 def write_other_info(ws, server_data, start_row, start_col):
-    if server_data.get("SDCard", "") != "Absent":
+    if server_data.get("SDCard") not in (None, "", "None", "Absent", "NotPresent"):
         start_row = _write_component_row(
             ws,
             start_row,
@@ -373,7 +386,7 @@ def write_other_info(ws, server_data, start_row, start_col):
             quantity=1,
         )
 
-    if server_data.get("TrustedModules", "") not in ["NotPresent", "Absent"]:
+    if server_data.get("TrustedModules") not in (None, "", "None", "NotPresent", "Absent"):
         start_row = _write_component_row(
             ws,
             start_row,
@@ -398,7 +411,9 @@ def extract_json_from_text(text: str) -> dict:
             return {}
 
 def write_desc_info(ws, start_row, current_col):
-    Values = ["№", "S/N", "P/N", "Наименование", "Spare P/N", "Description", "Quantity", "Комментарий"]
+    Values = ["№", "S/N", "P/N", "Наименование", "Spare P/N", "Description", "Quantity", "Комментарий",
+              "Версия прошивки", "State", "Health", "HealthRollup", "Температура, °C", "DIMMStatus",
+              "Политика питания", "Состояние питания", "Включение после потери питания"]
     for column in range(len(Values)):
         ws.cell(row=start_row, column=current_col + column, value=Values[column])
     return (start_row + 1, 1)
@@ -409,6 +424,10 @@ def write_server_info(ws, server_data, start_row, current_col):
     ws.cell(row=start_row, column=2, value=server_data.get("SerialNumber"))
     ws.cell(row=start_row, column=3, value=server_data.get("SKU"))
     ws.cell(row=start_row, column=4, value=server_data.get("Model"))
+    for column, field in ((9, "BiosVersion"), (10, "ServerState"), (11, "ServerHealth"),
+                          (12, "ServerHealthRollup"), (15, "PowerRegulatorMode"),
+                          (16, "PowerState"), (17, "PowerAutoOn")):
+        ws.cell(row=start_row, column=column, value=display_value(server_data.get(field)))
     start_row += 1
     return (start_row, 4+1)
 from getFromJSON.getArrayControllers import get_array_controllers
@@ -429,9 +448,10 @@ def print_parser(file_name):
 
         try:
             raw_data = json.load(f)
-            if not raw_data.get('/redfish/v1/Chassis/1', None):
+            if not isinstance(raw_data, dict) or not raw_data.get('/redfish/v1/Chassis/1'):
                 return None
-        except Exception as e:
+        except (ValueError, OSError) as e:
+            print(f"Не удалось прочитать JSON {file_name}: {e}")
             return None
         data = None
         data = get_chassis(raw_data)
@@ -444,7 +464,7 @@ def print_parser(file_name):
         data.update(get_PCI_slots(raw_data))
         data["SmartStorage"], data["PhysicalDisks"] = get_array_controllers(raw_data)
         data["Memory"] = get_memory(raw_data)
-        print(json.dumps(data, indent=4))
+        data.update(get_diagnostics(raw_data))
         return data
     print("-"*50)
 
@@ -495,10 +515,15 @@ def _parseJSONToExel(json_files, folder_selected):
         current_row += 2
         SERVER_NUMBER += 1
 
-    if PN_SUMMARY:
-        ws_pn = wb_out.create_sheet(title="Группировка_PN")
-        write_pn_summary_sheet(ws_pn, server_rows)
+    ws_pn = wb_out.create_sheet(title="Группировка_PN")
+    write_pn_summary_sheet(ws_pn, server_rows)
 
+    format_status_colors(wb_out)
+    ws_out.freeze_panes = "D2"
+    for column in ("I", "J", "K", "L", "M", "N", "O", "P", "Q"):
+        ws_out.column_dimensions[column].width = 30
+        ws_out[column + "1"].alignment = Alignment(wrap_text=True, vertical="center")
+    ws_out.row_dimensions[1].height = 42
     wb_out.save(os.path.join(folder_selected, OUTPUT_PATH))
     # wb_out.save(folder_selecteded+OUTPUT_PATH)
     print(f"OK. Audit saved: {OUTPUT_PATH}")

@@ -1,6 +1,7 @@
 import re
 
 from search import search_one, stripJSON
+from getFromJSON.getDiagnostics import component_fields
 
 
 INVALID_VALUES = {"", "n/a", "na", "none", "null", "unknown"}
@@ -35,26 +36,28 @@ def _parse_adapter(data, source_path):
     if not serial_number:
         serial_number = _normalize_value(search_one(data, r"PCASerialNumber"))
 
-    firmware_version = search_one(data, r"VersionString", path_pattern=r"FirmwareVersion")
-    if firmware_version is None:
-        firmware_version = _normalize_value(search_one(data, r"FirmwareVersion"))
-
-    return {
+    adapter = {
         "Name": _normalize_value(search_one(data, r"Name")),
         "PartNumber": part_number,
         "SerialNumber": serial_number,
         "Model": _normalize_value(search_one(data, r"Model")),
-        "FirmwareVersion": _normalize_value(firmware_version),
         "Location": _normalize_value(search_one(data, r"Location")),
         "SourcePath": source_path,
     }
+    adapter.update(component_fields(data))
+    if not adapter["FirmwareVersion"]:
+        # NetworkAdapter resources carry firmware on their embedded controllers.
+        versions = [component_fields(controller)["FirmwareVersion"]
+                    for controller in (data.get("Controllers") or []) if isinstance(controller, dict)]
+        adapter["FirmwareVersion"] = "; ".join(dict.fromkeys(v for v in versions if v)) or None
+    return adapter
 
 
 def get_network_adapters(json_data):
     result = []
-    seen = set()
+    seen = {}
 
-    direct_adapter_pattern = re.compile(r".*/(NetworkAdapters|BaseNetworkAdapters)/\d+(-\d+)?$")
+    direct_adapter_pattern = re.compile(r".*/(NetworkAdapters|BaseNetworkAdapters)/[^/#]+$")
     device_pattern = re.compile(r".*/Devices/\d+(-\d+)?$")
     pcie_pattern = re.compile(r".*/PCIeDevices/\d+(-\d+)?$")
 
@@ -89,9 +92,13 @@ def get_network_adapters(json_data):
             )
 
         if dedupe_key in seen:
+            existing = seen[dedupe_key]
+            for field in ("FirmwareVersion", "State", "Health", "HealthRollup", "TemperatureCelsius"):
+                if existing.get(field) is None and adapter.get(field) is not None:
+                    existing[field] = adapter[field]
             continue
 
-        seen.add(dedupe_key)
+        seen[dedupe_key] = adapter
         result.append(adapter)
 
     return stripJSON(result)

@@ -1,6 +1,7 @@
 import re
 
 from search import search_one, stripJSON
+from getFromJSON.getDiagnostics import component_fields
 
 
 def get_memory(json_data):
@@ -17,6 +18,7 @@ def get_memory(json_data):
         node_result["VendorName"] = search_one(data, r"VendorName")
         node_result["Rank"] = search_one(data, r"Rank")
         node_result["SizeMB"] =  search_one(data, r"CapacityMiB") if search_one(data, r"CapacityMiB") else search_one(data, r"SizeMB")
+        node_result.update(component_fields(data))
         return node_result
 
     def match_by_pattern(data, pattern, descr="UNDEF", func=None):
@@ -31,5 +33,5 @@ def get_memory(json_data):
             ind += 1
         return result
 
-    return stripJSON(match_by_pattern(json_data, r".*/Memory/proc\d+(-\d+)?dimm\d+(-\d+)?", "Memory_", func=_get))
+    return stripJSON(match_by_pattern(json_data, r".*/Memory/(?:proc\d+(-\d+)?dimm\d+(-\d+)?|\d+)$", "Memory_", func=_get))
 
