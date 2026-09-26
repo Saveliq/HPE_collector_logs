@@ -10,7 +10,8 @@ from openpyxl import Workbook, load_workbook
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "ToExel"))
-from ParseJsonToExel import _parseJSONToExel, print_parser, OUTPUT_PATH
+from ParseJsonToExel import _parseJSONToExel, print_parser, OUTPUT_PATH, write_server_info
+from getFromJSON.getManager import get_manager
 from getFromJSON.getDiagnostics import get_diagnostics, component_fields
 from getFromJSON.getArrayControllers import get_array_controllers
 from getFromJSON.getPower import get_power
@@ -99,7 +100,14 @@ class ExampleDiagnosticsTests(unittest.TestCase):
             self.assertEqual(len(fan_rows), len(raw["/redfish/v1/Chassis/1/Thermal"]["Fans"]))
             for disk in data["PhysicalDisks"]:
                 self.assertTrue(disk["FirmwareVersion"])
-                self.assertIsInstance(disk["TemperatureCelsius"], (int, float))
+                temperatures = [node["CurrentTemperatureCelsius"] for node in raw.values()
+                                if isinstance(node, dict) and
+                                str(node.get("SerialNumber", "")).strip() == disk["SerialNumber"] and
+                                "CurrentTemperatureCelsius" in node]
+                if temperatures:
+                    self.assertEqual(disk["TemperatureCelsius"], temperatures[0])
+                else:
+                    self.assertIsNone(disk["TemperatureCelsius"])
 
     def test_workbook_roundtrip_and_repeated_runs(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -108,13 +116,26 @@ class ExampleDiagnosticsTests(unittest.TestCase):
             wb = load_workbook(Path(directory) / OUTPUT_PATH)
             try:
                 self.assertEqual(wb.sheetnames, ["Аудит", "Группировка_PN"])
-                self.assertEqual(wb["Аудит"].freeze_panes, "D2")
+                for sheet in wb:
+                    self.assertIsNone(sheet.freeze_panes)
                 audit = list(wb["Аудит"].values)
                 servers = [r for r in audit[1:] if isinstance(r[0], int)]
                 self.assertEqual(len(servers), 7)
-                self.assertEqual([r[14] for r in servers], [d["PowerRegulatorMode"] for d in self.parsed])
+                for row, raw in zip(servers, self.raw):
+                    bios = raw["/redfish/v1/Systems/1"]["BiosVersion"]
+                    ilo = raw["/redfish/v1/Managers/1"]["FirmwareVersion"]
+                    self.assertEqual(row[8], f"BIOS: {bios}; iLO: {ilo}")
+                self.assertEqual([r[13] for r in servers], [d["PowerRegulatorMode"] for d in self.parsed])
                 self.assertEqual(servers[2][10], "Critical")
-                self.assertTrue(any(isinstance(r[12], (int, float)) for r in audit if r[3] == "Диск"))
+                self.assertEqual(len(audit[0]), 15)
+                self.assertEqual(audit[0][12:], ("DIMMStatus", "Политика питания",
+                                                 "Включение после потери питания"))
+                self.assertFalse(any("температур" in str(c.value).lower() for ws in wb for row in ws for c in row))
+                self.assertNotIn("Состояние питания", audit[0])
+                self.assertEqual([r[14] for r in servers], [d["PowerAutoOn"] for d in self.parsed])
+                memory_errors = [r for r in wb["Аудит"].iter_rows(min_row=2) if r[12].value == "MapOutError"]
+                self.assertTrue(memory_errors)
+                self.assertTrue(all(r[12].fill.fgColor.rgb == "00FFC7CE" for r in memory_errors))
                 self.assertTrue(any(r[8] == "1.00" for r in audit if r[3] == "Блок питания"))
                 self.assertFalse(any(c.data_type == "f" for ws in wb for row in ws for c in row))
                 self.assertFalse(any(c.value == "Нет данных" for ws in wb for row in ws for c in row))
@@ -150,6 +171,25 @@ class ExampleDiagnosticsTests(unittest.TestCase):
 
 
 class DiagnosticEdgeCaseTests(unittest.TestCase):
+    def test_server_firmware_handles_missing_versions(self):
+        cases = [
+            ({"BiosVersion": "U30 v3.64", "iLOVersion": "iLO 5 v3.18"}, "BIOS: U30 v3.64; iLO: iLO 5 v3.18"),
+            ({"BiosVersion": "U30 v3.64", "iLOVersion": None}, "BIOS: U30 v3.64"),
+            ({"BiosVersion": "N/A", "iLOVersion": "3.19"}, "iLO: 3.19"),
+            ({}, None),
+        ]
+        for data, expected in cases:
+            with self.subTest(data=data):
+                ws = Workbook().active
+                write_server_info(ws, data, 1, 1)
+                self.assertEqual(ws["I1"].value, expected)
+                self.assertFalse(ws["I1"].alignment.wrap_text)
+                self.assertIsNone(ws.row_dimensions[1].height)
+
+    def test_ilo_version_does_not_require_ilo_prefix(self):
+        result = get_manager({"/redfish/v1/Managers/1": {"FirmwareVersion": "3.19"}})
+        self.assertEqual(result["iLOVersion"], "3.19")
+
     def test_missing_values_are_blank_but_zero_and_false_survive(self):
         for value in (None, "", "None", "null", "N/A", "Unknown", " Нет данных ", {}, []):
             self.assertIsNone(display_value(value))

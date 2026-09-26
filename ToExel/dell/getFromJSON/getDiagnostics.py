@@ -27,7 +27,7 @@ def _dict(value):
 
 def _oem(data):
     oem = _dict(data.get("Oem"))
-    return _dict(oem.get("Hpe") or oem.get("Hp"))
+    return _dict(oem.get("Dell"))
 
 
 def firmware_versions(value, path=""):

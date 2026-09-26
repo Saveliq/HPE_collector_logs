@@ -178,3 +178,93 @@ def stripJSON(json_data):
             json_data[key] = stripJSON(json_data[key])
 
     return json_data
+
+
+from getFromJSON.getDiagnostics import canonical_resources, component_fields
+
+SYSTEM = "/redfish/v1/Systems/System.Embedded.1"
+CHASSIS = "/redfish/v1/Chassis/System.Embedded.1"
+MANAGER = "/redfish/v1/Managers/iDRAC.Embedded.1"
+
+
+def _dict(value):
+    return value if isinstance(value, dict) else {}
+
+
+def _list(value):
+    return value if isinstance(value, list) else []
+
+
+def _first(*values):
+    """Keep explicit zero/False, but ignore missing and empty string fields."""
+    return next((v for v in values if v is not None and v != ""), None)
+
+
+def _scaled(value, factor):
+    return value * factor if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+class Resources:
+    def __init__(self, raw):
+        self.data = canonical_resources(raw)
+
+    def resolve(self, reference):
+        reference = _dict(reference)
+        path = reference.get("@odata.id", "")
+        base, _, fragment = path.partition("#")
+        value = self.data.get(base.rstrip("/"), {})
+        if fragment:
+            try:
+                for part in fragment.strip("/").split("/"):
+                    part = part.replace("~1", "/").replace("~0", "~")
+                    value = value[int(part)] if isinstance(value, list) else value[part]
+            except (KeyError, IndexError, TypeError, ValueError):
+                value = {}
+        return dict(reference, **_dict(value))
+
+    def matching(self, pattern):
+        return [node for path, node in self.data.items()
+                if re.fullmatch(pattern, path) and "error" not in node]
+
+    def oem(self, node, name):
+        return self.resolve(_dict(_dict(node.get("Oem")).get("Dell")).get(name))
+
+    def component(self, node, enrich_pcie=False):
+        """Only controllers/adapters may use their linked PCIe identity."""
+        result = dict(node, **component_fields(node))
+        if not enrich_pcie:
+            return result
+        links = _dict(node.get("Links"))
+        devices = [self.resolve(ref) for ref in _list(links.get("PCIeDevices"))]
+        for ref in _list(links.get("PCIeFunctions")):
+            function = self.resolve(ref)
+            device_ref = _dict(function.get("Links")).get("PCIeDevice")
+            if not device_ref:
+                path = _dict(ref).get("@odata.id", "")
+                device_ref = {"@odata.id": path.split("/PCIeFunctions/", 1)[0]}
+            devices.append(self.resolve(device_ref))
+        for device in devices:
+            for field in ("PartNumber", "SerialNumber"):
+                result[field] = _first(result.get(field), device.get(field))
+        return result
+
+
+def _installed(resources, nodes, keep_absent=False, enrich_pcie=False):
+    result = []
+    seen = set()
+    for node in nodes:
+        node = resources.resolve(node)
+        if (not node or "error" in node or
+                not any(key in node for key in ("Name", "Model", "Status", "SerialNumber")) or
+                (not keep_absent and is_absent(node))):
+            continue
+        # The same device can be returned through a collection and a direct URL.
+        key = node.get("@odata.id")
+        if key and key in seen:
+            continue
+        if key:
+            seen.add(key)
+        result.append(resources.component(node, enrich_pcie=enrich_pcie))
+    return result
+
+

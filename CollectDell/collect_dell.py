@@ -229,20 +229,7 @@ class ServerInfoCollector:
             r"/redfish/v1/Systems/.*/VirtualMedia(/.*)?",         # не про железо
             # PCIeFunctions — дубль PCIeDevices (сами устройства оставляем)
             r"/redfish/v1/.*/PCIeFunctions(/.*)?",
-            # Assembly (part-numbers плат) — инвентарь, не health
-            r"/redfish/v1/.*/Assembly#?(/.*)?$",
-            # iDRAC config-блобы и обвязка (не состояние железа)
-            r"/redfish/v1/Managers/.*/Oem/Dell/DellOpaqueManagementData(/.*)?",
-            r"/redfish/v1/Managers/.*/ManagerDiagnosticData(/.*)?",
-            r"/redfish/v1/Managers/.*/HostInterfaces(/.*)?",
-            r"/redfish/v1/Managers/.*/SerialInterfaces(/.*)?",
-            r"/redfish/v1/Managers/.*/PrivilegeRegistry(/.*)?",
-            r"/redfish/v1/Managers/.*/NetworkProtocol/.+/Certificates(/.*)?",
-        ]
-
-    @staticmethod
-    def normalize_url(url):
-        # Удаляет завершающий слеш из URL
+            # Assembly (part-numAлеш из URL
         if not isinstance(url, str):
             return None
         return url.rstrip('/')

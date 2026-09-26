@@ -5,7 +5,6 @@ from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.styles import Alignment
 from diagnostic_sheets import display_value, format_status_colors
-from getFromJSON.getDiagnostics import get_diagnostics
 from search import is_absent
 
 
@@ -404,7 +403,7 @@ def write_other_info(ws, server_data, start_row, start_col):
                 ws, start_row,
                 serial_number=component.get("SerialNumber"),
                 part_number=component.get("PartNumber"),
-                component_name=name,
+                component_name=component.get("ComponentName") or name,
                 description=component.get("Model") or component.get("DeviceName") or component.get("Name"),
                 comment=component.get("Location"),
                 telemetry=component,
@@ -438,7 +437,7 @@ def write_server_info(ws, server_data, start_row, current_col):
     ws.cell(row=start_row, column=3, value=server_data.get("SKU"))
     ws.cell(row=start_row, column=4, value=server_data.get("Model"))
     versions = []
-    for label, field in (("BIOS", "BiosVersion"), ("iLO", "iLOVersion")):
+    for label, field in (("BIOS", "BiosVersion"), ("iDRAC", "iDRACVersion")):
         version = display_value(server_data.get(field))
         if version is not None:
             versions.append(f"{label}: {version}")
@@ -449,6 +448,8 @@ def write_server_info(ws, server_data, start_row, current_col):
         ws.cell(row=start_row, column=column, value=display_value(server_data.get(field)))
     start_row += 1
     return (start_row, 4+1)
+
+
 from getFromJSON.getArrayControllers import get_array_controllers, get_storage_enclosures
 from getFromJSON.getChassis import get_chassis
 from getFromJSON.getEmbeddedMedia import get_embedded_media
@@ -459,34 +460,40 @@ from getFromJSON.getPCISlots import get_PCI_slots
 from getFromJSON.getProcessors import get_processors
 from getFromJSON.getPower import get_power
 from getFromJSON.getSystem import get_system
+from getFromJSON.getDiagnostics import get_diagnostics
+from search import SYSTEM, Resources, stripJSON
+
+
+def parse_data(raw_data):
+    if not isinstance(raw_data, dict):
+        return None
+    system = Resources(raw_data).data.get(SYSTEM, {})
+    if not system or "error" in system:
+        return None
+    data = get_chassis(raw_data)
+    data.update(get_manager(raw_data))
+    data.update(get_system(raw_data))
+    data["PowerSupplies"] = get_power(raw_data)
+    data["Processors"] = get_processors(raw_data)
+    data.update(get_embedded_media(raw_data))
+    data["NetworkAdapters"] = get_network_adapters(raw_data)
+    data.update(get_PCI_slots(raw_data))
+    data["SmartStorage"], data["PhysicalDisks"] = get_array_controllers(raw_data)
+    data["StorageEnclosures"] = get_storage_enclosures(raw_data)
+    data["Memory"] = get_memory(raw_data)
+    data.update(get_diagnostics(raw_data))
+    return stripJSON(data)
 
 
 def print_parser(file_name):
     print("-" * 50)
-    with open(file_name, 'r', encoding='utf-8') as f:
-
-        try:
+    try:
+        with open(file_name, 'r', encoding='utf-8-sig') as f:
             raw_data = json.load(f)
-            if not isinstance(raw_data, dict) or not raw_data.get('/redfish/v1/Chassis/1'):
-                return None
-        except (ValueError, OSError) as e:
-            print(f"Не удалось прочитать JSON {file_name}: {e}")
-            return None
-        data = None
-        data = get_chassis(raw_data)
-        data.update(get_manager(raw_data))
-        data.update(get_system(raw_data))
-        data["PowerSupplies"] = get_power(raw_data)
-        data["Processors"] = get_processors(raw_data)
-        data.update(get_embedded_media(raw_data))
-        data["NetworkAdapters"] = get_network_adapters(raw_data)
-        data.update(get_PCI_slots(raw_data))
-        data["SmartStorage"], data["PhysicalDisks"] = get_array_controllers(raw_data)
-        data["StorageEnclosures"] = get_storage_enclosures(raw_data)
-        data["Memory"] = get_memory(raw_data)
-        data.update(get_diagnostics(raw_data))
-        return data
-    print("-"*50)
+    except (ValueError, OSError) as e:
+        print(f"Не удалось прочитать JSON {file_name}: {e}")
+        return None
+    return parse_data(raw_data)
 
 def _parseJSONToExel(json_files, folder_selected):
     global SERVER_NUMBER, CURRENT_SERVER_INDEX

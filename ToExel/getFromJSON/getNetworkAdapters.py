@@ -1,6 +1,6 @@
 import re
 
-from search import search_one, stripJSON
+from search import search_one, stripJSON, is_absent
 from getFromJSON.getDiagnostics import component_fields
 
 
@@ -21,12 +21,13 @@ def _is_nic_device(data):
     return (
         "NIC" in device_type.upper()
         or "LOM" in device_type.upper()
+        or device_type.upper() in {"FIBRE CHANNEL", "CONVERGED NETWORK ADAPTER"}
         or "ETHERNET" in name.upper()
         or "NETWORK" in name.upper()
     )
 
 def _parse_adapter(data, source_path):
-    part_number = _normalize_value(search_one(data, r"PartNumber"))
+    part_number = _normalize_value(search_one(data, r"^PartNumber$"))
     if not part_number:
         part_number = _normalize_value(search_one(data, r"ProductPartNumber"))
     if not part_number:
@@ -62,7 +63,7 @@ def get_network_adapters(json_data):
     pcie_pattern = re.compile(r".*/PCIeDevices/\d+(-\d+)?$")
 
     for key, data in json_data.items():
-        if not isinstance(data, dict):
+        if not isinstance(data, dict) or is_absent(data):
             continue
 
         include = False
@@ -89,12 +90,16 @@ def get_network_adapters(json_data):
                 adapter.get("PartNumber", "").upper(),
                 adapter.get("Name", "").upper(),
                 adapter.get("Model", "").upper(),
+                adapter.get("Location") or key,
             )
 
         if dedupe_key in seen:
             existing = seen[dedupe_key]
-            for field in ("FirmwareVersion", "State", "Health", "HealthRollup", "TemperatureCelsius"):
-                if existing.get(field) is None and adapter.get(field) is not None:
+            # Prefer an actual P/N over ProductPartNumber/SKU fallback values.
+            if _normalize_value(data.get("PartNumber")):
+                existing["PartNumber"] = _normalize_value(data["PartNumber"])
+            for field in ("PartNumber", "Model", "Location", "FirmwareVersion", "State", "Health", "HealthRollup", "TemperatureCelsius"):
+                if existing.get(field) in (None, "") and adapter.get(field) is not None:
                     existing[field] = adapter[field]
             continue
 
