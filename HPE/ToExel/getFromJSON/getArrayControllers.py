@@ -17,7 +17,7 @@ def get_array_controllers(json_data):
         node_result["State"] = search_one(data, r"State", path_pattern="Status")
         return node_result
     def sub_DiskDrives(data, id_primary_node):
-        node_result = {}
+        node_result = {"SourcePath": id_primary_node}
         node_result["BlockSizeBytes"] = search_one(data, r"BlockSizeBytes")
         node_result["CapacityGB"] = search_one(data, r"CapacityGB")
         if node_result["CapacityGB"] is None and isinstance(data.get("CapacityBytes"), (int, float)):
@@ -42,7 +42,7 @@ def get_array_controllers(json_data):
         return node_result
     def _get(data, id_node):
         global Disks
-        node_result = {}
+        node_result = {"SourcePath": id_node}
         node_result["AdapterType"] = search_one(data, r"AdapterType")
         node_result["LocationFormat"] = search_one(data, r"LocationFormat")
         node_result["BackupPowerSourceStatus"] = search_one(data, r"BackupPowerSourceStatus")
@@ -139,6 +139,6 @@ def get_storage_enclosures(json_data):
         if (re.fullmatch(r".*/StorageEnclosures/[^/#]+", path)
                 and isinstance(data, dict) and not is_absent(data)
                 and (data.get("Model") or data.get("SerialNumber"))):
-            result.append(dict(data, **component_fields(data)))
+            result.append(dict(data, SourcePath=path, **component_fields(data)))
     return stripJSON(result)
 

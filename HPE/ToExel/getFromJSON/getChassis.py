@@ -15,17 +15,18 @@ def get_chassis(json_data):
     result["StorageBattery"] = search_one(data, r"PartNumber", path_pattern=r"SmartStorageBattery")
     oem = data.get("Oem") or {}
     hpe = oem.get("Hpe") or oem.get("Hp") or {}
-    result["StorageBatteries"] = [dict(battery, **component_fields(battery))
-                                for battery in (hpe.get("SmartStorageBattery") or [])
+    vendor = "Hpe" if oem.get("Hpe") else "Hp"
+    result["StorageBatteries"] = [dict(battery, SourcePath=f"/redfish/v1/Chassis/1#/Oem/{vendor}/SmartStorageBattery/{index}", **component_fields(battery))
+                                for index, battery in enumerate(hpe.get("SmartStorageBattery") or [])
                                 if isinstance(battery, dict) and not is_absent(battery)]
     thermal = json_data.get('/redfish/v1/Chassis/1/Thermal') or {}
     result["Fans"] = []
-    for fan in thermal.get("Fans") or []:
+    for index, fan in enumerate(thermal.get("Fans") or []):
         if not isinstance(fan, dict) or is_absent(fan):
             continue
         fan_oem = fan.get("Oem") or {}
         fan_hpe = fan_oem.get("Hpe") or fan_oem.get("Hp") or {}
         if str(fan_hpe.get("Location", "")).strip().lower() != "virtual":
-            result["Fans"].append(dict(fan, **component_fields(fan)))
+            result["Fans"].append(dict(fan, SourcePath=f"/redfish/v1/Chassis/1/Thermal#/Fans/{index}", **component_fields(fan)))
     return stripJSON(result)
 

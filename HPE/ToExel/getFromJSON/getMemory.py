@@ -29,7 +29,7 @@ def get_memory(json_data):
         }
         ind = 0
         for key, _data in nodes.items():
-            result.append(func(_data, int(key[-1])))
+            result.append(dict(func(_data, int(key[-1])), SourcePath=key))
             ind += 1
         return result
 

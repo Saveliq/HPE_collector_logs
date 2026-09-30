@@ -3,9 +3,11 @@
 Keep source paths: several Redfish views can describe the same physical device.
 Only repeated HTTP responses to fragment links are collapsed, never devices by name.
 """
+from search import is_absent
 
 FIRMWARE_FIELDS = {"Firmware", "FirmwareVersion", "FirmwarePackageVersion",
-                   "BiosVersion", "ManagerFirmwareVersion"}
+                   "FirmwareRevision", "BiosVersion", "ManagerFirmwareVersion",
+                   "MicrocodeInfo", "MicrocodeVersion"}
 STATUS_FIELDS = {"Status", "OperationalStatus", "DIMMStatus", "LinkStatus",
                  "PowerSupplyStatus", "BackupPowerSourceStatus", "StatusIndicator",
                  "AmpModeStatus", "CarrierAuthenticationStatus", "DiskDriveStatusReasons",
@@ -81,18 +83,31 @@ def canonical_resources(raw_data):
 def get_diagnostics(raw_data):
     result = {"FirmwareInventory": [], "ComponentStatus": [], "Temperatures": [], "PowerPolicy": []}
 
-    def walk(data, source, trail="", parent_name=""):
+    def walk(data, source, trail="", parent_name="", parent_identity=None):
         if isinstance(data, list):
             for index, child in enumerate(data):
-                walk(child, source, trail + "/" + str(index), parent_name)
+                walk(child, source, trail + "/" + str(index), parent_name, parent_identity)
             return
         if not isinstance(data, dict):
             return
         name = data.get("Name") or data.get("DeviceLocator") or parent_name or source.rsplit("/", 1)[-1]
         location = data.get("Location") or data.get("PhysicalContext") or data.get("DeviceLocator")
         path = source + ("#" + trail if trail else "")
-        identity = {"Name": name, "SerialNumber": data.get("SerialNumber"),
-                    "Location": location, "SourcePath": path}
+        # OEM and ProcessorId branches describe their owning component; preserve
+        # that physical identity for firmware counts and Health enrichment.
+        if parent_identity is None or any(key in data for key in
+                                         ("Name", "Model", "ProductName", "SerialNumber", "DeviceLocator", "MemberId")):
+            oem = _oem(data)
+            identity = {"Name": name, "Model": data.get("Model") or data.get("ProductName"),
+                        "PartNumber": data.get("PartNumber") or data.get("ControllerPartNumber") or oem.get("PartNumber"),
+                        "SerialNumber": data.get("SerialNumber") or oem.get("SerialNumber"),
+                        "Location": location, "ComponentPath": path,
+                        "DeviceType": data.get("DeviceType"), "MediaType": data.get("MediaType"),
+                        "FirmwareVersion": component_fields(data).get("FirmwareVersion") or data.get("Revision"),
+                        "Absent": is_absent(data)}
+        else:
+            identity = dict(parent_identity)
+        identity["SourcePath"] = path
         for field in sorted(FIRMWARE_FIELDS):
             if field in data:
                 for suffix, version in firmware_versions(data[field]):
@@ -100,6 +115,14 @@ def get_diagnostics(raw_data):
         # Standard SoftwareInventory resources use Version, rather than FirmwareVersion.
         if "FirmwareInventory/" in source and "Version" in data:
             result["FirmwareInventory"].append(dict(identity, Field="Version", Version=data["Version"]))
+        if "Revision" in data and ("/Drives/" in source or "/DiskDrives/" in source):
+            result["FirmwareInventory"].append(dict(identity, Field="FirmwareRevision", Version=data["Revision"]))
+        for patch in data.get("MicrocodePatches", []) or []:
+            if isinstance(patch, dict):
+                result["FirmwareInventory"].append(dict(
+                    identity, Field="MicrocodePatches/" + str(patch.get("CpuId", "UnknownCPU")),
+                    Version=patch.get("PatchId"),
+                ))
 
         for field in sorted(STATUS_FIELDS):
             if field not in data:
@@ -133,7 +156,7 @@ def get_diagnostics(raw_data):
                 continue
             if isinstance(child, (dict, list)):
                 child_name = name if isinstance(child, list) else name + " / " + key
-                walk(child, source, trail + "/" + key, child_name)
+                walk(child, source, trail + "/" + key, child_name, identity)
 
     for source, data in canonical_resources(raw_data).items():
         # Pending settings and event history are not current component telemetry.

@@ -4,6 +4,32 @@ from search import search_one, stripJSON
 from getFromJSON.getDiagnostics import component_fields
 
 
+def get_power_consumption(json_data):
+    """Read chassis consumption, never PSU capacity or a sum of overlapping domains.
+
+    Collectors can save either the Power response or a resolved #PowerControl
+    fragment. Prefer the base response when both snapshots are present.
+    """
+    path = "/redfish/v1/Chassis/1/Power"
+    sources = [path] + sorted(key for key in json_data if key.startswith(path + "#PowerControl"))
+    for source in sources:
+        body = json_data.get(source)
+        controls = body.get("PowerControl", body) if isinstance(body, dict) else body
+        if isinstance(controls, dict):
+            controls = [controls]
+        if not isinstance(controls, list):
+            continue
+        controls = [item for item in controls if isinstance(item, dict) and "PowerConsumedWatts" in item]
+        if len(controls) > 1:
+            controls = [item for item in controls if str(item.get("MemberId")) == "0"
+                        or item.get("PhysicalContext") == "Chassis"]
+        if len(controls) == 1:
+            value = controls[0].get("PowerConsumedWatts")
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return value
+    return None
+
+
 def get_power(json_data):
     def _parse_power_supply(data):
         node_result = {}
@@ -24,12 +50,12 @@ def get_power(json_data):
         key: val for key, val in json_data.items() if power_pattern.match(key)
     }
 
-    for _, data in power_nodes.items():
+    for path, data in power_nodes.items():
         if isinstance(data, dict) and isinstance(data.get("PowerSupplies"), list):
-            for power_supply in data["PowerSupplies"]:
-                result.append(_parse_power_supply(power_supply))
+            for index, power_supply in enumerate(data["PowerSupplies"]):
+                result.append(dict(_parse_power_supply(power_supply), SourcePath=f"{path}#/PowerSupplies/{index}"))
         elif isinstance(data, dict) and ("PowerSupplyType" in data or "SerialNumber" in data):
-            result.append(_parse_power_supply(data))
+            result.append(dict(_parse_power_supply(data), SourcePath=path))
 
     return stripJSON(result)
 

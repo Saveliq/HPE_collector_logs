@@ -23,7 +23,7 @@ def get_processors(json_data):
         key: val for key, val in json_data.items() if pattern.match(key)
     }
 
-    for _, data in nodes.items():
-        result.append(_get(data))
+    for path, data in nodes.items():
+        result.append(dict(_get(data), SourcePath=path))
 
     return stripJSON(result)
