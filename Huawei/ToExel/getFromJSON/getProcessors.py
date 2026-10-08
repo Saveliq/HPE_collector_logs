@@ -1,6 +1,6 @@
-from search import Resources
+"""Installed CPU inventory; Huawei/xFusion OEM P/N and S/N preserved."""
+from ._common import components
 
 
 def get_processors(json_data):
-    resources = Resources(json_data)
-    return resources.installed(resources.children(resources.system_path, "Processors"), keep_absent=True)
+    return components(json_data, 'Процессор')

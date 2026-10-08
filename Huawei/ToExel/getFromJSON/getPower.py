@@ -1,9 +1,20 @@
-from search import Resources, as_list
+"""Huawei Chassis/Power: inline PowerSupplies, PowerControl and Redundancy."""
+from ._common import components, parsed
 
 
 def get_power(json_data):
-    resources = Resources(json_data)
-    nodes = resources.children(resources.chassis_path, "PowerSubsystem/PowerSupplies")
-    if not nodes:
-        nodes = as_list(resources.resolve(resources.chassis_path + "/Power").get("PowerSupplies"))
-    return resources.installed(nodes)
+    return components(json_data,'Блок питания')
+
+
+def get_power_consumption(json_data):
+    return parsed(json_data)['PowerConsumedWatts']
+
+
+def get_psu_modes(json_data):
+    """Modes as reported separately by each installed PSU, never inferred."""
+    return parsed(json_data)['PSUModes']
+
+
+def get_power_redundancy(json_data):
+    """Redfish Redundancy groups with their explicit Health/Enabled fields."""
+    return parsed(json_data)['RedundancyGroups']

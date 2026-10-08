@@ -1,8 +1,8 @@
-from search import Resources, first_value
+"""Huawei iBMC FirmwareVersion, with ActiveBMC fallback; never BackupBMC."""
+from ._common import parsed
 
 
 def get_manager(json_data):
-    resources = Resources(json_data)
-    manager = resources.resolve(resources.manager_path)
-    active = resources.resolve("/redfish/v1/UpdateService/FirmwareInventory/ActiveBMC")
-    return {"iBMCVersion": first_value(manager.get("FirmwareVersion"), active.get("Version"))}
+    s=parsed(json_data)
+    return {'iBMCVersion':s['iBMCVersion'], 'FirmwareVersion':s['iBMCVersion'],
+            'FirmwareSource':s['iBMCSource'], 'SourcePath':s['ManagerPath']}

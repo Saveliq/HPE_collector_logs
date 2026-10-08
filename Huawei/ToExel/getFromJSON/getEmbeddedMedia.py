@@ -1,9 +1,11 @@
-from search import Resources
+"""Huawei Systems/Managers USBDevices inventory, only if present in collected JSON."""
+from ._common import parsed, descendants, is_absent
 
 
 def get_embedded_media(json_data):
-    resources = Resources(json_data)
-    # VirtualMedia/USBStick is a remote virtual drive, not a physical USB device.
-    nodes = resources.children(resources.system_path, "USBDevices")
-    nodes += resources.children(resources.chassis_path, "USBDevices")
-    return {"USBDevices": resources.installed(nodes)}
+    s=parsed(json_data);out=[]
+    for base in (s['SystemPath'],s['ManagerPath']):
+        if base:
+            for p,b in descendants(json_data,base+'/USBDevices'):
+                if not is_absent(b):out.append(dict(b, SourcePath=p))
+    return {'USBDevices':out}

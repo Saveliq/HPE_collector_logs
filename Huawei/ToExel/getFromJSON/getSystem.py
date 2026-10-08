@@ -1,27 +1,18 @@
-from search import Resources, as_dict, as_list, huawei, first_value, is_absent
+"""Huawei Systems/{id}: model, BIOS, state, CPU and RAM summaries."""
+from ._common import parsed
 
 
 def get_system(json_data):
-    resources = Resources(json_data)
-    system = resources.resolve(resources.system_path)
-    status = as_dict(system.get("Status"))
-    oem = huawei(system)
-    attributes = as_dict(resources.resolve(resources.system_path + "/Bios").get("Attributes"))
-    processors = as_dict(system.get("ProcessorSummary"))
-    memory = as_dict(system.get("MemorySummary"))
-    result = {
-        "BiosVersion": system.get("BiosVersion"),
-        "ServerState": status.get("State"), "ServerHealth": status.get("Health"),
-        "ServerHealthRollup": status.get("HealthRollup"), "PowerState": system.get("PowerState"),
-        "PowerRegulatorMode": first_value(attributes.get("CustomPowerPolicy"), oem.get("PowerPolicy")),
-        "PowerAutoOn": first_value(oem.get("PowerOnStrategy"), system.get("PowerRestorePolicy")),
-        "ProcessorModel": processors.get("Model"), "ProcessorCount": processors.get("Count"),
-        "TotalSystemMemoryGiB": memory.get("TotalSystemMemoryGiB"),
-        "MemorySummary": as_dict(memory.get("Status")).get("HealthRollup"),
+    s=parsed(json_data)
+    return {
+        'Model': s['Model'], 'PartNumber': s['PartNumber'],
+        'SerialNumber': s['SerialNumber'], 'BiosVersion': s['BiosVersion'],
+        'BiosSource': s['BiosSource'], 'ServerState': s['ServerState'],
+        'ServerHealth': s['ServerHealth'], 'ServerHealthRollup': s['ServerHealthRollup'],
+        'PowerState': s['PowerState'], 'ProcessorModel': s['ProcessorModel'],
+        'ProcessorCount': s['ProcessorCount'], 'TotalSystemMemoryGiB': s['MemoryTotalGiB'],
+        'MemorySummary': s['MemoryHealth'], 'SourcePath': s['SystemPath'],
+        'PowerConsumedWatts': s['PowerConsumedWatts'], 'RedundancyMode': s['RedundancyMode'],
+        'CustomPowerPolicy': s['CustomPowerPolicy'], 'PowerSaving': s['PowerSaving'],
+        'PSUModes': s['PSUModes'], 'RedundancyGroups': s['RedundancyGroups'],
     }
-    modules = [module for module in as_list(system.get("TrustedModules"))
-               if isinstance(module, dict) and not is_absent(module) and
-               (module.get("InterfaceType") or module.get("Status"))]
-    if modules:
-        result["TrustedModules"] = modules
-    return result
