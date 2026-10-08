@@ -1,16 +1,27 @@
 import re
 
 from search import SYSTEM, CHASSIS, Resources, _dict, _list, _first, _installed, stripJSON
-
-
 from getFromJSON.getDiagnostics import component_fields
+
+
+INVALID_IDENTITY = {"", "unknown", "n/a", "na", "none", "null", "not available", "notavailable"}
+MAC_SUFFIX = re.compile(r"\s+-\s+(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 
 
 def _identity(*values):
     for value in values:
-        if isinstance(value, str) and value.strip().lower() not in {"", "unknown", "n/a", "none", "null"}:
+        if isinstance(value, str) and value.strip().lower() not in INVALID_IDENTITY:
             return value.strip()
     return None
+
+
+def _product_model(value):
+    value = _identity(value)
+    if not value:
+        return None
+    # Dell port ProductName frequently ends in " - <MAC>".  That suffix is a
+    # port instance identifier, not the adapter model and must never become P/N.
+    return MAC_SUFFIX.sub("", value).strip()
 
 
 def _adapter_details(resources, node):
@@ -48,15 +59,25 @@ def get_network_adapters(json_data):
         if key:
             seen.add(key)
         details = _adapter_details(resources, node)
-        # Use actual P/N first; a product/model name is the fallback for cards
-        # such as QME2662 whose OEM PartNumber is explicitly null.
-        node["Model"] = _identity(node.get("Model"),
-                                  *(d.get("ProductName") for d in details),
-                                  *(d.get("DeviceName") for d in details))
-        node["PartNumber"] = _identity(node.get("PartNumber"),
-                                       *(d.get("PartNumber") for d in details), node.get("Model"))
-        node["SerialNumber"] = _identity(node.get("SerialNumber"),
-                                         *(d.get("SerialNumber") for d in details))
+        # Embedded LOM adapters omit PCIe links. Dell's port inventory exposes
+        # the PCI bus; use it only when it identifies one device in this chassis.
+        buses = {str(d["BusNumber"]) for d in details if d.get("BusNumber") is not None}
+        if len(buses) == 1:
+            bus = next(iter(buses))
+            devices = resources.matching(re.escape(CHASSIS + "/PCIeDevices/" + bus) + r"-[^/]+")
+            if len(devices) == 1:
+                node["SourceAliases"].append(devices[0]["@odata.id"])
+
+        product_names = [_product_model(d.get("ProductName")) for d in details]
+        device_names = [_product_model(d.get("DeviceName")) for d in details]
+        node["Model"] = _identity(_product_model(node.get("Model")), *product_names, *device_names)
+
+        # P/N must be a real PartNumber.  Do not substitute ProductName/Model:
+        # on embedded BCM5720 adapters that value contains a port MAC address and
+        # was previously written to Excel as if it were a part number.
+        node["PartNumber"] = _identity(node.get("PartNumber"), *(d.get("PartNumber") for d in details))
+        node["SerialNumber"] = _identity(node.get("SerialNumber"), *(d.get("SerialNumber") for d in details))
+
         versions = []
         for controller in _list(node.get("Controllers")):
             version = component_fields(_dict(controller)).get("FirmwareVersion")
@@ -66,5 +87,3 @@ def get_network_adapters(json_data):
         node["Name"] = _first(node.get("Model"), node.get("Id"), node.get("Name"))
         result.append(node)
     return stripJSON(result)
-
-

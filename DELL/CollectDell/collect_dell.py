@@ -74,7 +74,7 @@ class RedfishClient:
         try:
             # Логируем попытку авторизации
             self._log_info("Попытка авторизации")
-            self.client.login(auth=redfish.rest.v1.AuthMethod.BASIC)
+            self.client.login()
             self._log_info("Авторизация успешно выполнена")
             return True
         except redfish.rest.v1.InvalidCredentialsError as e:
@@ -229,9 +229,21 @@ class ServerInfoCollector:
             r"/redfish/v1/Systems/.*/VirtualMedia(/.*)?",         # не про железо
             # PCIeFunctions — дубль PCIeDevices (сами устройства оставляем)
             r"/redfish/v1/.*/PCIeFunctions(/.*)?",
-            # Assembly (part-numAлеш из URL
-        if not isinstance(url, str):
-            return None
+            # Assembly (part-numbers плат) — инвентарь, не health
+            r"/redfish/v1/.*/Assembly#?(/.*)?$",
+            # iDRAC config-блобы и обвязка (не состояние железа)
+            r"/redfish/v1/Managers/.*/Oem/Dell/DellAttributes(/.*)?",
+            r"/redfish/v1/Managers/.*/Oem/Dell/DellOpaqueManagementData(/.*)?",
+            r"/redfish/v1/Managers/.*/ManagerDiagnosticData(/.*)?",
+            r"/redfish/v1/Managers/.*/HostInterfaces(/.*)?",
+            r"/redfish/v1/Managers/.*/SerialInterfaces(/.*)?",
+            r"/redfish/v1/Managers/.*/PrivilegeRegistry(/.*)?",
+            r"/redfish/v1/Managers/.*/NetworkProtocol/.+/Certificates(/.*)?",
+        ]
+
+    @staticmethod
+    def normalize_url(url):
+        # Удаляет завершающий слеш из URL
         return url.rstrip('/')
 
     @staticmethod
@@ -239,9 +251,8 @@ class ServerInfoCollector:
         # Извлекает все ссылки (@odata.id) из данных
         result = []
         if isinstance(data, dict):
-            odata_id = data.get("@odata.id")
-            if isinstance(odata_id, str) and odata_id:
-                result.append(ServerInfoCollector.normalize_url(odata_id))
+            if "@odata.id" in data:
+                result.append(ServerInfoCollector.normalize_url(data["@odata.id"]))
             for value in data.values():
                 result.extend(ServerInfoCollector.extract_links(value))
         elif isinstance(data, list):

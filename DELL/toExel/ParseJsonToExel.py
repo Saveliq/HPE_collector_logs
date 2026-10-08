@@ -3,9 +3,10 @@ import os
 import json
 from pathlib import Path
 from openpyxl import Workbook
-from openpyxl.styles import Alignment
 from diagnostic_sheets import display_value, format_status_colors
-from search import is_absent
+from fleet_sheets import write_fleet_sheets, format_audit
+from getFromJSON.getDiagnostics import get_diagnostics
+from search import SYSTEM, Resources, is_absent
 
 
 # === CONFIGURATION ===
@@ -13,12 +14,13 @@ OUTPUT_PATH = Path("Аудит_результаты.xlsx")
 SERVER_NUMBER = 1
 PN_SUMMARY = {}  # server_index -> {PN -> {count, names, description}}
 CURRENT_SERVER_INDEX = None
-INVALID_IDENTIFIERS = {"", "none", "null", "nan", "n/a", "na", "unknown", "notpresent", "absent"}
+INVALID_IDENTIFIERS = {"", "none", "null", "nan", "n/a", "na", "unknown", "notpresent", "absent", "not available", "notavailable"}
 
 # Порядок и подписи полей, которые нужно извлекать из JSON
 FIELDS = [
-    ("SKU", "SKU"),
+    ("PartNumber", "P/N сервера"),
     ("SerialNumber", "Серийный номер"),
+    ("ServiceTag", "Dell Service Tag"),
     ("Model", "Модель"),
     ("FirmwareVersion", "Версия прошивки"),
     ("BiosVersion", "BIOS версия"),
@@ -104,10 +106,10 @@ def _unique_by_sn(components, prefix):
 def _register_pn_summary(part_number, component_name, description):
     if CURRENT_SERVER_INDEX is None:
         return
-    
+
     if CURRENT_SERVER_INDEX not in PN_SUMMARY:
         PN_SUMMARY[CURRENT_SERVER_INDEX] = {}
-    
+
     server_data = PN_SUMMARY[CURRENT_SERVER_INDEX]
     summary = server_data.setdefault(
         part_number,
@@ -133,21 +135,19 @@ def _write_component_row(
     component_name,
     spare_part_number="",
     description="",
-    quantity=1,
     comment="",
     telemetry=None,
 ):
     normalized_part_number = _normalize_part_number(part_number, spare_part_number, component_name)
 
-    ws.cell(row=row, column=2, value=_to_text(serial_number))
+    # Dell Service Tag identifies the server, not its individual components.
     ws.cell(row=row, column=3, value=normalized_part_number)
     ws.cell(row=row, column=4, value=_to_text(component_name))
     ws.cell(row=row, column=5, value=_to_text(spare_part_number))
     ws.cell(row=row, column=6, value=_to_text(description))
-    ws.cell(row=row, column=7, value=quantity)
-    ws.cell(row=row, column=8, value=_to_text(comment))
+    ws.cell(row=row, column=7, value=_to_text(comment))
     telemetry = telemetry or {}
-    for column, field in enumerate(("FirmwareVersion", "State", "Health", "HealthRollup", "DIMMStatus"), 9):
+    for column, field in enumerate(("FirmwareVersion", "State", "Health", "HealthRollup", "DIMMStatus"), 8):
         ws.cell(row=row, column=column, value=display_value(telemetry.get(field)))
     _register_pn_summary(normalized_part_number, component_name, description)
     return row + 1
@@ -155,20 +155,20 @@ def _write_component_row(
 
 def write_pn_summary_sheet(ws, server_rows):
     row = 1
-    
+
     for server_index, server_row in enumerate(server_rows):
         # Заголовки таблицы компонентов
         ws.cell(row=row, column=1, value="P/N")
         ws.cell(row=row, column=2, value="Компонент")
         ws.cell(row=row, column=3, value="Количество")
         ws.cell(row=row, column=4, value="Описание (пример)")
-        
+
         row += 1
-        
+
         # Данные для этого сервера
         server_pn_data = PN_SUMMARY.get(server_index, {})
         sorted_items = sorted(server_pn_data.items(), key=lambda item: (-item[1]["count"], item[0]))
-        
+
         for part_number, summary in sorted_items:
             component_names = ", ".join(sorted(summary["names"])) if summary["names"] else "UNKNOWN_COMPONENT"
             ws.cell(row=row, column=1, value=part_number)
@@ -176,10 +176,10 @@ def write_pn_summary_sheet(ws, server_rows):
             ws.cell(row=row, column=3, value=summary["count"])
             ws.cell(row=row, column=4, value=summary["example_description"])
             row += 1
-        
+
         # Пустая строка между серверами
         row += 1
-    
+
     return row
 
 
@@ -201,7 +201,6 @@ def write_proc_info(ws, server_data, start_row, start_col):
                 part_number=processor.get("PartNumber"),
                 component_name="Процессор",
                 description=description,
-                quantity=1,
                 comment=str(comment),
                 telemetry=processor,
             )
@@ -228,7 +227,6 @@ def write_proc_info(ws, server_data, start_row, start_col):
             part_number="",
             component_name="Процессор",
             description=processor_model or "Процессор",
-            quantity=1,
             comment="Серийный номер не найден в источнике",
         )
 
@@ -245,7 +243,6 @@ def write_NIC_info(ws, server_data, start_row, start_col):
             part_number=nic.get("PartNumber"),
             component_name="Сетевой адаптер",
             description=nic.get("Name"),
-            quantity=1,
             comment=str({"Model": nic.get("Model"), "FirmwareVersion": nic.get("FirmwareVersion")}),
             telemetry=nic,
         )
@@ -255,7 +252,8 @@ def write_NIC_info(ws, server_data, start_row, start_col):
 def write_RAID_info(ws, server_data, start_row, start_col):
     raid_controllers = server_data.get("SmartStorage")
 
-    for raid in _unique_by_sn(raid_controllers, "RAID"):
+    for raid in _unique_by_sn(raid_controllers, "STORAGE"):
+        component_name = raid.get("ComponentName") or "Контроллер хранения"
         description = {
             "Model": raid.get("Model"),
             "CacheMemorySizeMiB": raid.get("CacheMemorySizeMiB"),
@@ -267,9 +265,8 @@ def write_RAID_info(ws, server_data, start_row, start_col):
             start_row,
             serial_number=raid.get("SerialNumber"),
             part_number=raid.get("PartNumber"),
-            component_name="RAID контроллер",
+            component_name=component_name,
             description=str(description),
-            quantity=1,
             comment=str(comment),
             telemetry=raid,
         )
@@ -282,7 +279,7 @@ def write_RAID_info(ws, server_data, start_row, start_col):
             part_number=battery.get("PartNumber"),
             component_name="RAID батарея",
             spare_part_number=battery.get("SparePartNumber"),
-            description=battery.get("ProductName") or battery.get("Model"),
+            description=battery.get("ProductName") or battery.get("Model") or battery.get("Name"),
             telemetry=battery,
         )
 
@@ -297,7 +294,7 @@ def write_MEM_info(ws, server_data, start_row, start_col):
 
     for dimm in _unique_by_sn(memory_modules, "DIMM"):
         description = {
-            "SizeMB": dimm.get("SizeMB"),
+            "SizeMiB": dimm.get("SizeMiB", dimm.get("SizeMB")),
             "Frequency": dimm.get("Frequency"),
             "Rank": dimm.get("Rank"),
             "Technology": dimm.get("Technology"),
@@ -310,7 +307,6 @@ def write_MEM_info(ws, server_data, start_row, start_col):
             part_number=part_number,
             component_name="Память",
             description=str(description),
-            quantity=1,
             comment=dimm.get("Manufacturer"),
             telemetry=dimm,
         )
@@ -336,7 +332,6 @@ def write_PSU_info(ws, server_data, start_row, start_col):
             component_name="Блок питания",
             spare_part_number=psu.get("SparePartNumber"),
             description=str(description),
-            quantity=1,
             comment=str(comment),
             telemetry=psu,
         )
@@ -347,7 +342,9 @@ def write_DISK_info(ws, server_data, start_row, start_col):
     physical_disks = _unique_by_sn(server_data.get("PhysicalDisks"), "DISK")
 
     for disk in physical_disks:
-        part_number = disk.get("PartNumber") or disk.get("Model")
+        part_number = disk.get("PartNumber")
+        if _is_invalid_identifier(part_number):
+            part_number = disk.get("Model")
         description = {
             "Model": disk.get("Model"),
             "CapacityGB": disk.get("CapacityGB"),
@@ -365,7 +362,6 @@ def write_DISK_info(ws, server_data, start_row, start_col):
             part_number=part_number,
             component_name="Диск",
             description=str(description),
-            quantity=1,
             comment=str(comment),
             telemetry=disk,
         )
@@ -381,18 +377,26 @@ def write_other_info(ws, server_data, start_row, start_col):
             part_number="",
             component_name="SDCard",
             description="Найден SDCard модуль",
-            quantity=1,
         )
 
-    if not _is_invalid_identifier(server_data.get("TrustedModules")) and not is_absent(server_data.get("TrustedModules")):
+    for index, module in enumerate(_ensure_list(server_data.get("TrustedModules")), 1):
+        if not isinstance(module, dict) or is_absent(module):
+            continue
+        interface_type = module.get("InterfaceType")
+        description = interface_type or module.get("Name") or "Модуль доверенной платформы"
+        comment = {
+            "InterfaceType": interface_type,
+            "FirmwareVersion2": module.get("FirmwareVersion2"),
+        }
         start_row = _write_component_row(
             ws,
             start_row,
-            serial_number="TPM_NO_SN_1",
-            part_number="",
+            serial_number=module.get("SerialNumber") or f"TPM_NO_SN_{index}",
+            part_number=module.get("PartNumber"),
             component_name="TrustedModule",
-            description="Найден модуль доверенной платформы",
-            quantity=1,
+            description=description,
+            comment=str(comment),
+            telemetry=module,
         )
 
     for field, prefix, name in (("StorageEnclosures", "ENCLOSURE", "Дисковая полка"),
@@ -423,9 +427,9 @@ def extract_json_from_text(text: str) -> dict:
             return {}
 
 def write_desc_info(ws, start_row, current_col):
-    Values = ["№", "S/N", "P/N", "Наименование", "Spare P/N", "Description", "Quantity", "Комментарий",
+    Values = ["№", "Dell Service Tag", "P/N", "Наименование", "Spare P/N", "Description", "Комментарий",
               "Версия прошивки", "State", "Health", "HealthRollup", "DIMMStatus",
-              "Политика питания", "Включение после потери питания"]
+              "Политика питания", "Redundancy Policy", "Hot Spare", "Primary PSU", "Потребление, Вт"]
     for column in range(len(Values)):
         ws.cell(row=start_row, column=current_col + column, value=Values[column])
     return (start_row + 1, 1)
@@ -433,23 +437,22 @@ def write_desc_info(ws, start_row, current_col):
 
 def write_server_info(ws, server_data, start_row, current_col):
     ws.cell(row=start_row, column=1, value=SERVER_NUMBER)
-    ws.cell(row=start_row, column=2, value=server_data.get("SerialNumber"))
-    ws.cell(row=start_row, column=3, value=server_data.get("SKU"))
+    ws.cell(row=start_row, column=2, value=display_value(server_data.get("ServiceTag")))
+    ws.cell(row=start_row, column=3, value=server_data.get("PartNumber") or server_data.get("SKU"))
     ws.cell(row=start_row, column=4, value=server_data.get("Model"))
     versions = []
     for label, field in (("BIOS", "BiosVersion"), ("iDRAC", "iDRACVersion")):
         version = display_value(server_data.get(field))
         if version is not None:
             versions.append(f"{label}: {version}")
-    ws.cell(row=start_row, column=9, value="; ".join(versions) or None)
-    for column, field in ((10, "ServerState"), (11, "ServerHealth"),
-                          (12, "ServerHealthRollup"), (14, "PowerRegulatorMode"),
-                          (15, "PowerAutoOn")):
+    ws.cell(row=start_row, column=8, value="; ".join(versions) or None)
+    for column, field in ((9, "ServerState"), (10, "ServerHealth"),
+                          (11, "ServerHealthRollup"), (13, "PowerRegulatorMode"),
+                          (14, "RedundancyPolicy"), (15, "HotSpare"),
+                          (16, "PrimaryPSU"), (17, "PowerConsumedWatts")):
         ws.cell(row=start_row, column=column, value=display_value(server_data.get(field)))
     start_row += 1
     return (start_row, 4+1)
-
-
 from getFromJSON.getArrayControllers import get_array_controllers, get_storage_enclosures
 from getFromJSON.getChassis import get_chassis
 from getFromJSON.getEmbeddedMedia import get_embedded_media
@@ -458,22 +461,21 @@ from getFromJSON.getMemory import get_memory
 from getFromJSON.getNetworkAdapters import get_network_adapters
 from getFromJSON.getPCISlots import get_PCI_slots
 from getFromJSON.getProcessors import get_processors
-from getFromJSON.getPower import get_power
+from getFromJSON.getPower import get_power, get_power_consumption
 from getFromJSON.getSystem import get_system
-from getFromJSON.getDiagnostics import get_diagnostics
-from search import SYSTEM, Resources, stripJSON
 
 
 def parse_data(raw_data):
     if not isinstance(raw_data, dict):
         return None
     system = Resources(raw_data).data.get(SYSTEM, {})
-    if not system or "error" in system:
+    if not system or "error" in system or not any(key in system for key in ("Model", "SerialNumber", "SKU")):
         return None
     data = get_chassis(raw_data)
     data.update(get_manager(raw_data))
     data.update(get_system(raw_data))
     data["PowerSupplies"] = get_power(raw_data)
+    data["PowerConsumedWatts"] = get_power_consumption(raw_data)
     data["Processors"] = get_processors(raw_data)
     data.update(get_embedded_media(raw_data))
     data["NetworkAdapters"] = get_network_adapters(raw_data)
@@ -482,18 +484,17 @@ def parse_data(raw_data):
     data["StorageEnclosures"] = get_storage_enclosures(raw_data)
     data["Memory"] = get_memory(raw_data)
     data.update(get_diagnostics(raw_data))
-    return stripJSON(data)
+    return data
 
 
 def print_parser(file_name):
-    print("-" * 50)
     try:
-        with open(file_name, 'r', encoding='utf-8-sig') as f:
-            raw_data = json.load(f)
-    except (ValueError, OSError) as e:
-        print(f"Не удалось прочитать JSON {file_name}: {e}")
+        with open(file_name, "r", encoding="utf-8-sig") as file:
+            return parse_data(json.load(file))
+    except (ValueError, OSError) as error:
+        print(f"Не удалось прочитать JSON {file_name}: {error}")
         return None
-    return parse_data(raw_data)
+
 
 def _parseJSONToExel(json_files, folder_selected):
     global SERVER_NUMBER, CURRENT_SERVER_INDEX
@@ -501,6 +502,7 @@ def _parseJSONToExel(json_files, folder_selected):
     SERVER_NUMBER = 1
     CURRENT_SERVER_INDEX = None
     server_rows = []
+    servers = []
     processed_servers = set()
     wb_out = Workbook()
     ws_out = wb_out.active
@@ -515,7 +517,7 @@ def _parseJSONToExel(json_files, folder_selected):
         if data is None:
             continue
 
-        server_pn = _to_text(data.get("SKU"), "UNKNOWN_SERVER_PN")
+        server_pn = _to_text(data.get("PartNumber") or data.get("SKU"), "UNKNOWN_SERVER_PN")
         server_sn = _to_text(data.get("SerialNumber"), "UNKNOWN_SERVER_SN")
         server_model = _to_text(data.get("Model"), "UNKNOWN_SERVER_MODEL")
         server_key = _server_unique_key(server_pn, server_sn, server_model)
@@ -526,6 +528,8 @@ def _parseJSONToExel(json_files, folder_selected):
 
         processed_servers.add(server_key)
         server_rows.append((server_pn, server_sn, server_model))
+        data["SourceFile"] = str(Path(json_file))
+        servers.append(data)
         CURRENT_SERVER_INDEX = len(server_rows) - 1
 
         # запись информации о сервере
@@ -545,13 +549,9 @@ def _parseJSONToExel(json_files, folder_selected):
     ws_pn = wb_out.create_sheet(title="Группировка_PN")
     write_pn_summary_sheet(ws_pn, server_rows)
 
+    write_fleet_sheets(wb_out, servers)
+    format_audit(ws_out)
     format_status_colors(wb_out)
-    for column in ("I", "J", "K", "L", "M", "N", "O"):
-        ws_out.column_dimensions[column].width = 30
-        ws_out[column + "1"].alignment = Alignment(wrap_text=True, vertical="center")
-    ws_out.row_dimensions[1].height = 42
     wb_out.save(os.path.join(folder_selected, OUTPUT_PATH))
     # wb_out.save(folder_selecteded+OUTPUT_PATH)
     print(f"OK. Audit saved: {OUTPUT_PATH}")
-
-

@@ -11,10 +11,11 @@ def is_absent(data):
     else:
         status = data.get("Status") or {}
         oem = data.get("Oem") or {}
-        hpe = oem.get("Hpe") or oem.get("Hp") or {}
+        dell = oem.get("Dell") or {}
+        memory = dell.get("DellMemory") or {}
         values = [data.get("State"), data.get("DIMMStatus"),
                   status.get("State") if isinstance(status, dict) else status,
-                  hpe.get("DIMMStatus")]
+                  memory.get("DIMMStatus")]
     return any(re.sub(r"[\s_-]", "", str(value)).lower() in
                {"absent", "notpresent", "notinstalled", "empty", "removed"}
                for value in values)
@@ -180,7 +181,6 @@ def stripJSON(json_data):
     return json_data
 
 
-from getFromJSON.getDiagnostics import canonical_resources, component_fields
 
 SYSTEM = "/redfish/v1/Systems/System.Embedded.1"
 CHASSIS = "/redfish/v1/Chassis/System.Embedded.1"
@@ -206,7 +206,11 @@ def _scaled(value, factor):
 
 class Resources:
     def __init__(self, raw):
+        from getFromJSON.getDiagnostics import canonical_resources
         self.data = canonical_resources(raw)
+        # Recover the canonical address when a collector omitted @odata.id.
+        self.data = {path: dict(node, **{"@odata.id": node.get("@odata.id") or path})
+                     for path, node in self.data.items()}
 
     def resolve(self, reference):
         reference = _dict(reference)
@@ -231,11 +235,26 @@ class Resources:
 
     def component(self, node, enrich_pcie=False):
         """Only controllers/adapters may use their linked PCIe identity."""
+        from getFromJSON.getDiagnostics import component_fields
         result = dict(node, **component_fields(node))
+        result["SourcePath"] = node.get("SourcePath") or node.get("@odata.id")
+        links = _dict(node.get("Links"))
+        result["SourceAliases"] = []
+        for field in ("PCIeDevices", "PCIeFunctions", "NetworkDeviceFunctions", "NetworkPorts", "Ports"):
+            result["SourceAliases"].extend(ref["@odata.id"] for ref in _list(links.get(field))
+                                           if isinstance(ref, dict) and ref.get("@odata.id"))
+        for controller in _list(node.get("Controllers")):
+            controller_links = _dict(_dict(controller).get("Links"))
+            for field in ("PCIeDevices", "PCIeFunctions", "NetworkDeviceFunctions", "NetworkPorts", "Ports"):
+                result["SourceAliases"].extend(ref["@odata.id"] for ref in _list(controller_links.get(field))
+                                               if isinstance(ref, dict) and ref.get("@odata.id"))
         if not enrich_pcie:
             return result
         links = _dict(node.get("Links"))
         devices = [self.resolve(ref) for ref in _list(links.get("PCIeDevices"))]
+        for controller in _list(node.get("Controllers")):
+            devices.extend(self.resolve(ref) for ref in
+                           _list(_dict(_dict(controller).get("Links")).get("PCIeDevices")))
         for ref in _list(links.get("PCIeFunctions")):
             function = self.resolve(ref)
             device_ref = _dict(function.get("Links")).get("PCIeDevice")
@@ -244,6 +263,8 @@ class Resources:
                 device_ref = {"@odata.id": path.split("/PCIeFunctions/", 1)[0]}
             devices.append(self.resolve(device_ref))
         for device in devices:
+            if device.get("@odata.id"):
+                result["SourceAliases"].append(device["@odata.id"])
             for field in ("PartNumber", "SerialNumber"):
                 result[field] = _first(result.get(field), device.get(field))
         return result
@@ -266,5 +287,3 @@ def _installed(resources, nodes, keep_absent=False, enrich_pcie=False):
             seen.add(key)
         result.append(resources.component(node, enrich_pcie=enrich_pcie))
     return result
-
-
