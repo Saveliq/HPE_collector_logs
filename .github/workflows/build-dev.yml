@@ -1,0 +1,317 @@
+
+name: Build DEV Windows EXE
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # 1. Автоматический поиск Python-приложений
+  discover:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+
+    outputs:
+      targets: ${{ steps.scan.outputs.targets }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Discover Python entry points
+        id: scan
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import json
+          from pathlib import Path
+
+          roots = ("ALL", "DELL", "Huawei", "HPE")
+
+          entry_names = (
+              "main.py",
+              "collect.py",
+              "collector.py",
+              "toexcel_main.py",
+              "toexel_main.py",
+              "toexcel.py",
+              "toexel.py",
+              "run.py",
+          )
+
+          ignored_dirs = {
+              ".git", ".venv", "venv", "__pycache__",
+              "build", "dist", "tests", ".pytest_cache"
+          }
+
+          ignored_files = {
+              "__init__.py", "__main__.py",
+              "utils.py", "helpers.py", "config.py",
+              "models.py", "api.py"
+          }
+
+          targets = []
+
+          for root_name in roots:
+              root = Path(root_name)
+
+              if not root.is_dir():
+                  raise SystemExit(
+                      f"Required directory missing: {root}"
+                  )
+
+              for directory, subdirs, files in os.walk(root):
+                  subdirs[:] = [
+                      d for d in subdirs
+                      if d not in ignored_dirs
+                  ]
+
+                  folder = Path(directory)
+
+                  py_files = [
+                      folder / f for f in files
+                      if f.lower().endswith(".py")
+                      and f.lower() not in ignored_files
+                      and not f.lower().startswith("test_")
+                  ]
+
+                  marker = folder / "build-entry.txt"
+                  entry = None
+
+                  # Явно указанная точка входа
+                  if marker.is_file():
+                      entry_name = marker.read_text(
+                          encoding="utf-8-sig"
+                      ).strip()
+
+                      entry = folder / entry_name
+
+                      if not entry.is_file():
+                          raise SystemExit(
+                              f"Invalid build-entry.txt: {entry}"
+                          )
+
+                  else:
+                      # Поиск по стандартным именам
+                      candidates = {
+                          p.name.lower(): p for p in py_files
+                      }
+
+                      for name in entry_names:
+                          if name in candidates:
+                              entry = candidates[name]
+                              break
+
+                      # Если Python-файл всего один
+                      if entry is None and len(py_files) == 1:
+                          entry = py_files[0]
+
+                  if entry is None:
+                      if len(py_files) > 1 and (
+                          folder == root
+                          or folder.name.lower() in (
+                              "toexel", "toexcel"
+                          )
+                      ):
+                          raise SystemExit(
+                              f"Ambiguous entry point in {folder}. "
+                              "Add build-entry.txt"
+                          )
+                      continue
+
+                  app_name = folder.as_posix().replace("/", "-")
+
+                  if folder == root:
+                      app_name += "-collector"
+
+                  targets.append({
+                      "entry": entry.as_posix(),
+                      "name": app_name
+                  })
+
+          if not targets:
+              raise SystemExit("No build targets found")
+
+          names = [t["name"].lower() for t in targets]
+          if len(names) != len(set(names)):
+              raise SystemExit("Duplicate EXE names detected")
+
+          print("Build targets:")
+          for target in targets:
+              print(f"  {target['entry']} -> "
+                    f"{target['name']}.exe")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(
+                  "targets="
+                  + json.dumps(targets, separators=(",", ":"))
+                  + "\n"
+              )
+          PY
+
+  # 2. Отдельная сборка каждого EXE
+  build:
+    needs: discover
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.discover.outputs.targets) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          architecture: 'x64'
+
+      - name: Install PyInstaller
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip pyinstaller
+          if ($LASTEXITCODE -ne 0) {
+            throw "PyInstaller installation failed"
+          }
+
+      - name: Install project dependencies
+        shell: pwsh
+        env:
+          ENTRY_FILE: ${{ matrix.entry }}
+        run: |
+          $folder = Split-Path $env:ENTRY_FILE -Parent
+          $current = $folder
+          $requirements = $null
+
+          while ($true) {
+            foreach ($filename in @(
+              "requirements.txt",
+              "requirements"
+            )) {
+              $candidate = Join-Path $current $filename
+
+              if (Test-Path $candidate -PathType Leaf) {
+                $requirements = $candidate
+                break
+              }
+            }
+
+            if ($requirements -or $current -eq ".") {
+              break
+            }
+
+            $parent = Split-Path $current -Parent
+
+            if ([string]::IsNullOrWhiteSpace($parent)) {
+              $current = "."
+            } else {
+              $current = $parent
+            }
+          }
+
+          if ($requirements) {
+            Write-Host "Installing $requirements"
+
+            python -m pip install -r $requirements
+
+            if ($LASTEXITCODE -ne 0) {
+              throw "Dependency installation failed"
+            }
+          } else {
+            Write-Warning "No requirements file found"
+          }
+
+      - name: Build single EXE
+        shell: pwsh
+        env:
+          ENTRY_FILE: ${{ matrix.entry }}
+          APP_NAME: ${{ matrix.name }}
+        run: |
+          $entry = (Resolve-Path $env:ENTRY_FILE).Path
+          $appDir = Split-Path $entry -Parent
+
+          $rootFolder = (
+            $env:ENTRY_FILE -split '[/\\]'
+          )[0]
+
+          $vendorDir = Join-Path `
+            $env:GITHUB_WORKSPACE $rootFolder
+
+          python -m PyInstaller `
+            --onefile `
+            --console `
+            --clean `
+            --noconfirm `
+            --name $env:APP_NAME `
+            --distpath "$env:GITHUB_WORKSPACE/dist" `
+            --workpath "$env:RUNNER_TEMP/pyi-build" `
+            --specpath "$env:RUNNER_TEMP/pyi-spec" `
+            --paths "$appDir" `
+            --paths "$vendorDir" `
+            --paths "$env:GITHUB_WORKSPACE" `
+            "$entry"
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "PyInstaller build failed"
+          }
+
+          $exe = Join-Path "dist" "$env:APP_NAME.exe"
+
+          if (-not (Test-Path $exe)) {
+            throw "Expected EXE not found: $exe"
+          }
+
+          Get-Item $exe | Select-Object Name, Length
+
+      - name: Upload individual EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: exe-${{ matrix.name }}
+          path: dist/${{ matrix.name }}.exe
+          if-no-files-found: error
+          retention-days: 30
+
+  # 3. Общий DEV Release со всеми EXE
+  release:
+    needs:
+      - discover
+      - build
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all executables
+        uses: actions/download-artifact@v4
+        with:
+          pattern: exe-*
+          path: dist
+          merge-multiple: true
+
+      - name: Show release files
+        run: |
+          ls -lh dist/
+          test -n "$(find dist -maxdepth 1 -name '*.exe' -print -quit)"
+
+      - name: Publish DEV prerelease
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: dev-v${{ github.run_number }}-${{ github.run_attempt }}
+          target_commitish: ${{ github.sha }}
+          name: DEV Build ${{ github.run_number }}
+          prerelease: true
+          make_latest: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
